@@ -1,11 +1,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-from ml_template.data import ingest, schema
-from ml_template.db.connection import load_registry, register_columns
-from ml_template.data.extract import extract
-from ml_template.features.build import build_features
 from sqlalchemy import create_engine
+
+from ml_template.data import ingest, schema
+from ml_template.data.extract import extract
+from ml_template.db.connection import load_registry, register_columns
+from ml_template.features.build import build_features
 
 N_WAFERS = 20
 FIXTURE_CUTOFF_OFFSET = pd.Timedelta(minutes=30)

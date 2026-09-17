@@ -17,11 +17,12 @@ import logging
 from datetime import UTC, datetime
 
 import pandas as pd
-from ml_template.db.connection import data_fingerprint, load_registry
+from sqlalchemy import Engine
+
 from ml_template.data.ingest import git_sha
+from ml_template.db.connection import data_fingerprint, load_registry
 from ml_template.paths import ROOT
 from ml_template.tracking.runs import write_dataset_card
-from sqlalchemy import Engine
 
 logger = logging.getLogger("semcon")
 

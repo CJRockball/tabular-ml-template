@@ -5,8 +5,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from ml_template.scoring import batch
 from sklearn.linear_model import LogisticRegression
+
+from ml_template.scoring import batch
 
 
 def test_check_contract_raises_on_missing():

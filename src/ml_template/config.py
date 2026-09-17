@@ -2,6 +2,7 @@
 import tomllib
 
 from pydantic import BaseModel, ConfigDict, Field
+
 from ml_template.paths import ROOT
 
 # --- Data decisions (frozen after EDA; see validation.md) ---

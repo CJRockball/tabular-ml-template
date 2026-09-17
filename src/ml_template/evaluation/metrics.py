@@ -17,7 +17,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from ml_template.tracking.utils import setup_logging
 from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
@@ -27,6 +26,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
 )
+
+from ml_template.tracking.utils import setup_logging
 
 logger = setup_logging()
 

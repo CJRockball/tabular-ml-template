@@ -23,12 +23,13 @@ import re
 import numpy as np
 import pandas as pd
 import pandera.pandas as pa
+
 from ml_template.data import schema
-from ml_template.db.connection import get_engine, register_columns
 from ml_template.data.extract import extract
+from ml_template.db.connection import get_engine, register_columns
 from ml_template.paths import DATA, LOGS
-from ml_template.tracking.utils import setup_logging
 from ml_template.tracking import runs
+from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("semcon")
 

@@ -23,9 +23,10 @@ import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+
 from ml_template.data import schema
-from ml_template.db.connection import get_engine
 from ml_template.data.extract import extract
+from ml_template.db.connection import get_engine
 from ml_template.features.build import build_features
 from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.utils import setup_logging

@@ -23,7 +23,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from ml_template.data import schema
+
 from ml_template.config import (
     CV_LIMIT,
     DEVIANT_FAIL_ENRICHMENT,
@@ -33,6 +33,8 @@ from ml_template.config import (
     MIN_DEVIANT_N,
     NAN_FRAC_MAX,
 )
+from ml_template.data import schema
+from ml_template.data.extract import extract
 from ml_template.db.connection import (
     assert_schema,
     export_registry_csv,
@@ -41,7 +43,6 @@ from ml_template.db.connection import (
     load_registry,
     retire_columns,
 )
-from ml_template.data.extract import extract
 from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.runs import write_dataset_card
 from ml_template.tracking.utils import setup_logging

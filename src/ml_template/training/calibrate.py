@@ -26,12 +26,6 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from ml_template.data import schema, runs
-from ml_template.db.connection import get_engine
-from ml_template.data.extract import extract
-from ml_template.paths import ARTIFACTS, LOGS
-from ml_template.tracking.utils import setup_logging
-from ml_template.data.validate import ensure_is_fail
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -40,6 +34,13 @@ from sklearn.metrics import (
     brier_score_loss,
     roc_auc_score,
 )
+
+from ml_template.data import runs, schema
+from ml_template.data.extract import extract
+from ml_template.data.validate import ensure_is_fail
+from ml_template.db.connection import get_engine
+from ml_template.paths import ARTIFACTS, LOGS
+from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("semcon")
 

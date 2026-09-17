@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from ml_template.data import schema
-from ml_template.db.connection import feature_columns
-from ml_template.data.validate import ensure_is_fail
 from sqlalchemy import inspect
+
+from ml_template.data import schema
+from ml_template.data.validate import ensure_is_fail
+from ml_template.db.connection import feature_columns
 
 ENGINEERED = ["f_miss_clq14", "f_miss_clq23", "f_miss_block5", "f_row_missing_rate"]
 

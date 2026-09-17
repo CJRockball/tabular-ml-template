@@ -20,7 +20,8 @@ from pathlib import Path
 
 import dash_ag_grid as dag
 from dash import Dash, Input, Output, dcc, html
-from ml_template.dashboard import data, figures
+
+from ml_template.dashboard import dash_data, dash_figs
 from ml_template.paths import ARTIFACTS
 
 APP_TITLE = "semcon | Process & Model Monitoring"
@@ -95,7 +96,7 @@ def configure_artifacts(artifacts: Path | None) -> Path:
     working-directory assumption leaks into callbacks.
     """
     root = Path(artifacts) if artifacts is not None else ARTIFACTS
-    data.PATHS.update(
+    dash_data.PATHS.update(
         {
             "monitor_index": root / "index_monitor.csv",
             "training_index": root / "index.csv",
@@ -128,7 +129,7 @@ def _controls(label: str, component) -> html.Div:
 
 
 def build_layout() -> html.Div:
-    """Static component tree. Data-bearing props are populated by callbacks."""
+    """Static component tree. dash_data-bearing props are populated by callbacks."""
     return html.Div(
         [
             dcc.Interval(id=IDS["refresh"], interval=REFRESH_MS, n_intervals=0),
@@ -197,7 +198,7 @@ def build_layout() -> html.Div:
                                 [
                                     dag.AgGrid(
                                         id=IDS["alert_grid"],
-                                        columnDefs=figures.make_alert_columns(),
+                                        columnDefs=dash_figs.make_alert_columns(),
                                         defaultColDef={
                                             "sortable": True,
                                             "filter": True,
@@ -255,13 +256,13 @@ def build_layout() -> html.Div:
 
 def _split_boundaries(run: dict) -> tuple[int | None, int | None]:
     """Read i_hold/i_tail stored by spc.py; absent values keep figures useful."""
-    config = data.load_run_config(run)
+    config = dash_data.load_run_config(run)
     return config.get("i_hold"), config.get("i_tail")
 
 
 def _latest_run_or_none() -> tuple[dict | None, str | None]:
     try:
-        return data.latest_monitor_run(), None
+        return dash_data.latest_monitor_run(), None
     except (FileNotFoundError, ValueError) as exc:
         return None, str(exc)
 
@@ -284,7 +285,7 @@ def register_callbacks(app: Dash) -> None:
             return (f"Waiting for monitoring artifacts: {error}", "—", "—", "—", "—", "—")
         meta = run["meta"]
         return (
-            f"Reading the latest registry row on every refresh. Artifact root: {data.PATHS['monitor_index'].parent}",
+            f"Reading the latest registry row on every refresh. Artifact root: {dash_data.PATHS['monitor_index'].parent}",
             run["run_id"],
             str(meta.get("n_screened", "—")),
             str(meta.get("n_drift", "—")),
@@ -296,7 +297,7 @@ def register_callbacks(app: Dash) -> None:
         Output(IDS["pchart"], "figure"),
         Output(IDS["row_missing"], "figure"),
         Output(IDS["overview"], "figure"),
-        Output(IDS["alert_grid"], "rowData"),
+        Output(IDS["alert_grid"], "rowdash_data"),
         Output(IDS["protocol_feature"], "options"),
         Output(IDS["protocol_feature"], "value"),
         Output(IDS["imr_feature"], "options"),
@@ -310,18 +311,18 @@ def register_callbacks(app: Dash) -> None:
             return blank, blank, blank, [], [], None, [], None
         try:
             i_hold, i_tail = _split_boundaries(run)
-            pchart = data.load_pchart(run)
-            row_missing = data.load_protocol_row_missing(run)
-            protocol = data.load_protocol_rates(run)
-            screening = data.load_screening(run)
-            drift = data.load_drift_table(run)
-            imr = data.load_imr_series(run)
+            pchart = dash_data.load_pchart(run)
+            row_missing = dash_data.load_protocol_row_missing(run)
+            protocol = dash_data.load_protocol_rates(run)
+            screening = dash_data.load_screening(run)
+            drift = dash_data.load_drift_table(run)
+            imr = dash_data.load_imr_series(run)
             protocol_features = sorted(protocol["feature"].unique())
             imr_features = sorted(imr["feature"].unique())
             return (
-                figures.make_pchart_fig(pchart, i_hold, i_tail),
-                figures.make_row_missing_fig(row_missing, i_hold, i_tail),
-                figures.make_drift_overview_fig(screening),
+                dash_figs.make_pchart_fig(pchart, i_hold, i_tail),
+                dash_figs.make_row_missing_fig(row_missing, i_hold, i_tail),
+                dash_figs.make_drift_overview_fig(screening),
                 drift.reset_index(names="feature").to_dict("records"),
                 [{"label": f, "value": f} for f in protocol_features],
                 protocol_features[0] if protocol_features else None,
@@ -343,8 +344,8 @@ def register_callbacks(app: Dash) -> None:
             return _message_figure("Protocol rates", error or "Choose a protocol feature")
         try:
             i_hold, i_tail = _split_boundaries(run)
-            return figures.make_protocol_rates_fig(
-                data.load_protocol_rates(run), feature, i_hold, i_tail
+            return dash_figs.make_protocol_rates_fig(
+                dash_data.load_protocol_rates(run), feature, i_hold, i_tail
             )
         except (FileNotFoundError, ValueError, KeyError) as exc:
             return _message_figure("Protocol artifact contract error", str(exc))
@@ -360,8 +361,8 @@ def register_callbacks(app: Dash) -> None:
             return _message_figure("I / MR / EWMA", error or "Choose a showcase feature")
         try:
             i_hold, i_tail = _split_boundaries(run)
-            return figures.make_imr_fig(
-                data.load_imr_series(run), data.load_limits(run), feature, i_hold, i_tail
+            return dash_figs.make_imr_fig(
+                dash_data.load_imr_series(run), dash_data.load_limits(run), feature, i_hold, i_tail
             )
         except (FileNotFoundError, ValueError, KeyError) as exc:
             return _message_figure("IMR artifact contract error", str(exc))
@@ -373,11 +374,11 @@ def register_callbacks(app: Dash) -> None:
     )
     def refresh_score_batches(_: int):
         try:
-            batches = data.list_score_batches()
+            batches = dash_data.list_score_batches()
         except FileNotFoundError:
             return [], None
         options = [
-            {"label": data.run_label(batch), "value": batch["run_id"]} for batch in batches
+            {"label": dash_data.run_label(batch), "value": batch["run_id"]} for batch in batches
         ]
         return options, options[-1]["value"] if options else None
 
@@ -390,11 +391,11 @@ def register_callbacks(app: Dash) -> None:
         if run_id is None:
             return _message_figure("Inspection-priority queue", "No scored batches found")
         try:
-            batches = {batch["run_id"]: batch for batch in data.list_score_batches()}
+            batches = {batch["run_id"]: batch for batch in dash_data.list_score_batches()}
             if run_id not in batches:
                 raise ValueError(f"score batch is no longer available: {run_id}")
-            return figures.make_queue_fig(
-                data.load_score_queue(batches[run_id]), top_k=TOP_K
+            return dash_figs.make_queue_fig(
+                dash_data.load_score_queue(batches[run_id]), top_k=TOP_K
             )
         except (FileNotFoundError, ValueError, KeyError) as exc:
             return _message_figure("Score artifact contract error", str(exc))

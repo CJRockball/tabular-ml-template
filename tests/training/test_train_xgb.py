@@ -19,6 +19,7 @@ matplotlib.use("Agg")  # headless: evaluation saves figures
 import numpy as np
 import pandas as pd
 import pytest
+
 from ml_template.training import xgboost
 
 # ── parse_args ────────────────────────────────────────────────────────────────

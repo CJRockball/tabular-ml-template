@@ -20,8 +20,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from ml_template.data import schema
+from sklearn.metrics import (
+    average_precision_score,
+    brier_score_loss,
+    roc_auc_score,
+)
+from sklearn.model_selection import RepeatedStratifiedKFold
+from xgboost import XGBClassifier
+
 from ml_template.config import CUTOFF, load_config, parse_overrides
+from ml_template.data import schema
+from ml_template.data.extract import extract
+from ml_template.data.snapshots import write_gold_snapshot
+from ml_template.data.validate import ensure_is_fail
 from ml_template.db.connection import (
     assert_schema,
     data_fingerprint,
@@ -30,6 +41,7 @@ from ml_template.db.connection import (
     load_registry,
     register_columns,
 )
+from ml_template.evaluation.explain import save_shap_plots
 from ml_template.evaluation.metrics import (
     classification_summary,
     operating_points,
@@ -38,22 +50,11 @@ from ml_template.evaluation.metrics import (
     save_pr_curve,
     tune_threshold,
 )
-from ml_template.evaluation.explain import save_shap_plots
-from ml_template.data.extract import extract
 from ml_template.features.build import build_features
-from ml_template.paths import LOGS
 from ml_template.features.selection import select_features
-from ml_template.data.snapshots import write_gold_snapshot
+from ml_template.paths import LOGS
 from ml_template.tracking.runs import append_index, make_run, save_features, save_splits
 from ml_template.tracking.utils import setup_logging
-from ml_template.data.validate import ensure_is_fail
-from sklearn.metrics import (
-    average_precision_score,
-    brier_score_loss,
-    roc_auc_score,
-)
-from sklearn.model_selection import RepeatedStratifiedKFold
-from xgboost import XGBClassifier
 
 logger = logging.getLogger("semcon")
 

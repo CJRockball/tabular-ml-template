@@ -14,12 +14,13 @@ the wide frame exists precisely so these features can still be built.
 import logging
 
 import pandas as pd
-from ml_template.data import schema
+
 from ml_template.config import BLOCK5_FIRST, CLIQUE_14, CLIQUE_23
-from ml_template.db.connection import assert_schema, get_engine, register_columns
+from ml_template.data import schema
 from ml_template.data.extract import extract
-from ml_template.paths import LOGS
 from ml_template.data.schema import EXPECTED_CLQ14, EXPECTED_CLQ23
+from ml_template.db.connection import assert_schema, get_engine, register_columns
+from ml_template.paths import LOGS
 from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("semcon")

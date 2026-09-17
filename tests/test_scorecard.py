@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+
 from ml_template.data import schema
 from ml_template.evaluation.reports import compute_panel
 

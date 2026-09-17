@@ -34,6 +34,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import pandas as pd
+
 from ml_template.paths import ARTIFACTS
 
 TRACKED_PKGS = ("numpy", "pandas", "scikit-learn", "xgboost")

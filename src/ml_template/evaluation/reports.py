@@ -23,10 +23,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
 from ml_template.data import schema
+from ml_template.data.extract import extract
 from ml_template.db.connection import get_engine
 from ml_template.evaluation.metrics import recall_at_flagrate
-from ml_template.data.extract import extract
 from ml_template.features.build import build_features
 from ml_template.paths import LOGS
 from ml_template.scoring.batch import SCORES, append_index, git_sha

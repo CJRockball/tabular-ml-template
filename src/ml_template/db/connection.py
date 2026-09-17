@@ -8,9 +8,10 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy import Engine, bindparam, create_engine, inspect, text
+
 from ml_template.data import schema
 from ml_template.paths import ROOT, SQL
-from sqlalchemy import Engine, bindparam, create_engine, inspect, text
 
 DB_PATH = ROOT / "data" / "secom.db"
 REQUIRED_TABLES = {"sensor_readings", "wafer_labels", "column_registry", "ingestion_log"}
