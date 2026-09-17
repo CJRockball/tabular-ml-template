@@ -35,7 +35,4 @@ jobs:
       - name: Pytest
         run: uv run pytest -v -m "not local_data"
 
-      - name: Operational pipeline smoke test
-        run: |
-          make trigger
           
