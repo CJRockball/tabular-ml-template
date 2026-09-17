@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import inspect
-
 from semcon import schema
 from semcon.db import feature_columns
 from semcon.validate import ensure_is_fail
+from sqlalchemy import inspect
 
 ENGINEERED = ["f_miss_clq14", "f_miss_clq23", "f_miss_block5", "f_row_missing_rate"]
 

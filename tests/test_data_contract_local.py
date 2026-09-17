@@ -5,7 +5,6 @@ Run: uv run pytest -m local_data
 
 import pandas as pd
 import pytest
-
 from semcon import schema
 from semcon.db import feature_columns, get_engine, load_registry
 from semcon.extract import extract

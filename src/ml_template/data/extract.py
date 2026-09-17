@@ -8,13 +8,12 @@ no label encoding, no feature work — those live downstream.
 import logging
 
 import pandas as pd
-from sqlalchemy import Engine
-
 from semcon import schema
 from semcon.config import CUTOFF, EXCLUDE_AFTER
 from semcon.db import get_engine, register_columns, run_query
 from semcon.paths import LOGS
 from semcon.utils import setup_logging
+from sqlalchemy import Engine
 
 logger = logging.getLogger("semcon")
 

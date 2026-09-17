@@ -23,7 +23,6 @@ import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-
 from semcon import schema
 from semcon.db import get_engine
 from semcon.extract import extract

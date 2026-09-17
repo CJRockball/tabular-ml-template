@@ -20,7 +20,6 @@ import sys
 from pathlib import Path
 
 import pandas as pd
-
 from semcon.paths import ARTIFACTS, LOGS
 from semcon.utils import setup_logging
 

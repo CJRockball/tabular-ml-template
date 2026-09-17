@@ -5,7 +5,6 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from plotly.graph_objects import Figure
-
 from semcon import dash_figs
 
 

@@ -23,7 +23,6 @@ import re
 import numpy as np
 import pandas as pd
 import pandera.pandas as pa
-
 from semcon import schema, tracking
 from semcon.db import get_engine, register_columns
 from semcon.extract import extract

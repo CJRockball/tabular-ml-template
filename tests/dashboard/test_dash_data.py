@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-
 from semcon import dash_data
 
 SCREENING_COLS = [

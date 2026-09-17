@@ -14,7 +14,6 @@ the wide frame exists precisely so these features can still be built.
 import logging
 
 import pandas as pd
-
 from semcon import schema
 from semcon.config import BLOCK5_FIRST, CLIQUE_14, CLIQUE_23
 from semcon.db import assert_schema, get_engine, register_columns

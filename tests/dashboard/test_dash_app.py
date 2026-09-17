@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from dash import dcc, html
-
 from semcon import dash_app, dash_data
 
 

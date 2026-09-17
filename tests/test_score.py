@@ -5,9 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import LogisticRegression
-
 from semcon import score
+from sklearn.linear_model import LogisticRegression
 
 
 def test_check_contract_raises_on_missing():

@@ -28,7 +28,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from semcon import tracking
 from semcon.paths import ARTIFACTS, LOGS
 from semcon.score import load_contract, resolve_runs

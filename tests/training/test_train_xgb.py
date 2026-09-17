@@ -19,7 +19,6 @@ matplotlib.use("Agg")  # headless: evaluation saves figures
 import numpy as np
 import pandas as pd
 import pytest
-
 from semcon import train_xgb
 
 # ── parse_args ────────────────────────────────────────────────────────────────

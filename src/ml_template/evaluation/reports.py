@@ -23,7 +23,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from semcon import schema
 from semcon.db import get_engine
 from semcon.evaluation import recall_at_flagrate

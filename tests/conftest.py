@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
 import pytest
-from sqlalchemy import create_engine
-
 from semcon import db_ingest, schema
 from semcon.db import load_registry, register_columns
 from semcon.extract import extract
 from semcon.feature_eng import build_features
+from sqlalchemy import create_engine
 
 N_WAFERS = 20
 FIXTURE_CUTOFF_OFFSET = pd.Timedelta(minutes=30)

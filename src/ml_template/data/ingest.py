@@ -13,6 +13,10 @@ import subprocess
 from datetime import UTC, datetime
 
 import pandas as pd
+from semcon import schema
+from semcon.db import get_engine
+from semcon.paths import DATA_RAW, LOGS
+from semcon.utils import setup_logging
 from sqlalchemy import (
     Column,
     DateTime,
@@ -24,11 +28,6 @@ from sqlalchemy import (
     Table,
     text,
 )
-
-from semcon import schema
-from semcon.db import get_engine
-from semcon.paths import DATA_RAW, LOGS
-from semcon.utils import setup_logging
 
 logger = logging.getLogger("semcon")
 

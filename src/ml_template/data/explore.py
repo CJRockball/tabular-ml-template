@@ -23,7 +23,6 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-
 from semcon import schema
 from semcon.config import (
     CV_LIMIT,

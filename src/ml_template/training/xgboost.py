@@ -20,14 +20,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from sklearn.metrics import (
-    average_precision_score,
-    brier_score_loss,
-    roc_auc_score,
-)
-from sklearn.model_selection import RepeatedStratifiedKFold
-from xgboost import XGBClassifier
-
 from semcon import schema
 from semcon.config import CUTOFF, load_config, parse_overrides
 from semcon.db import (
@@ -55,6 +47,13 @@ from semcon.snapshots import write_gold_snapshot
 from semcon.tracking import append_index, make_run, save_features, save_splits
 from semcon.utils import setup_logging
 from semcon.validate import ensure_is_fail
+from sklearn.metrics import (
+    average_precision_score,
+    brier_score_loss,
+    roc_auc_score,
+)
+from sklearn.model_selection import RepeatedStratifiedKFold
+from xgboost import XGBClassifier
 
 logger = logging.getLogger("semcon")
 

@@ -20,7 +20,6 @@ from pathlib import Path
 
 import dash_ag_grid as dag
 from dash import Dash, Input, Output, dcc, html
-
 from semcon import dash_data, dash_figs
 from semcon.paths import ARTIFACTS
 

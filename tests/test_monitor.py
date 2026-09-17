@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
 from semcon.monitor import (
     compute_prediction_entropy,
     evaluate_feature_drift,

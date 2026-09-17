@@ -8,10 +8,9 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Engine, bindparam, create_engine, inspect, text
-
 from semcon import schema
 from semcon.paths import ROOT, SQL
+from sqlalchemy import Engine, bindparam, create_engine, inspect, text
 
 DB_PATH = ROOT / "data" / "secom.db"
 REQUIRED_TABLES = {"sensor_readings", "wafer_labels", "column_registry", "ingestion_log"}

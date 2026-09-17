@@ -26,6 +26,12 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from semcon import schema, tracking
+from semcon.db import get_engine
+from semcon.extract import extract
+from semcon.paths import ARTIFACTS, LOGS
+from semcon.utils import setup_logging
+from semcon.validate import ensure_is_fail
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -34,13 +40,6 @@ from sklearn.metrics import (
     brier_score_loss,
     roc_auc_score,
 )
-
-from semcon import schema, tracking
-from semcon.db import get_engine
-from semcon.extract import extract
-from semcon.paths import ARTIFACTS, LOGS
-from semcon.utils import setup_logging
-from semcon.validate import ensure_is_fail
 
 logger = logging.getLogger("semcon")
 
