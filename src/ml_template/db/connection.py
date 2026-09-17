@@ -8,8 +8,8 @@ import hashlib
 from pathlib import Path
 
 import pandas as pd
-from semcon import schema
-from semcon.paths import ROOT, SQL
+from ml_template.data import schema
+from ml_template.paths import ROOT, SQL
 from sqlalchemy import Engine, bindparam, create_engine, inspect, text
 
 DB_PATH = ROOT / "data" / "secom.db"

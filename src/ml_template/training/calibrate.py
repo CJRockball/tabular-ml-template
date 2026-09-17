@@ -26,12 +26,12 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from semcon import schema, tracking
-from semcon.db import get_engine
-from semcon.extract import extract
-from semcon.paths import ARTIFACTS, LOGS
-from semcon.utils import setup_logging
-from semcon.validate import ensure_is_fail
+from ml_template.data import schema, runs
+from ml_template.db.connection import get_engine
+from ml_template.data.extract import extract
+from ml_template.paths import ARTIFACTS, LOGS
+from ml_template.tracking.utils import setup_logging
+from ml_template.data.validate import ensure_is_fail
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -198,7 +198,7 @@ def main(argv=None):
     }
 
     parent_slug = parent.name.split("_", 2)[-1]  # "sel_g025" from "20260829_085633_sel_g025"
-    run_dir, meta = tracking.make_run(
+    run_dir, meta = runs.make_run(
         config={"script": "calibrate", "method": args.method, "parent_run": parent.name},
         run_name=f"cal-{args.method}__{parent_slug}",
         note=args.note,
@@ -217,7 +217,7 @@ def main(argv=None):
     pd.DataFrame([metrics]).to_csv(run_dir / "calibration_metrics.csv", index=False)
     save_reliability(y_cv, oof_mean, oof_cal, run_dir / "reliability_oof.png", "OOF")
     save_reliability(y_hold, p_hold_raw, p_hold_cal, run_dir / "reliability_holdout.png", "holdout")
-    tracking.append_index(run_dir, metrics)
+    runs.append_index(run_dir, metrics)
 
     logger.info(f"[calibrate] {metrics}")
     logger.info(f"[calibrate] done | artifacts -> {run_dir}")

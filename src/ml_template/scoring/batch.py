@@ -23,12 +23,12 @@ import joblib
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from semcon import schema
-from semcon.db import get_engine
-from semcon.extract import extract
-from semcon.feature_eng import build_features
-from semcon.paths import ARTIFACTS, LOGS
-from semcon.utils import setup_logging
+from ml_template.data import schema
+from ml_template.db.connection import get_engine
+from ml_template.data.extract import extract
+from ml_template.features.build import build_features
+from ml_template.paths import ARTIFACTS, LOGS
+from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("semcon")
 

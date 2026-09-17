@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 from plotly.graph_objects import Figure
-from semcon import dash_figs
+from ml_template.dashboard import figures
 
 
 @pytest.fixture()
@@ -110,7 +110,7 @@ def queue() -> pd.DataFrame:
 
 
 def test_pchart_returns_figure_with_limits_and_alarm(pchart: pd.DataFrame) -> None:
-    fig = dash_figs.make_pchart_fig(pchart, i_hold=100, i_tail=200)
+    fig = figures.make_pchart_fig(pchart, i_hold=100, i_tail=200)
     assert isinstance(fig, Figure)
     assert {trace.name for trace in fig.data} >= {"Observed fail rate", "UCL", "LCL", "Beyond UCL"}
     assert len(fig.layout.shapes) >= 3  # p-bar + Phase-II + tail markers
@@ -118,30 +118,30 @@ def test_pchart_returns_figure_with_limits_and_alarm(pchart: pd.DataFrame) -> No
 
 def test_pchart_rejects_incomplete_contract(pchart: pd.DataFrame) -> None:
     with pytest.raises(ValueError, match="pchart missing columns"):
-        dash_figs.make_pchart_fig(pchart.drop(columns="ucl"))
+        figures.make_pchart_fig(pchart.drop(columns="ucl"))
 
 
 def test_protocol_rates_support_overview_and_one_feature(protocol_rates: pd.DataFrame) -> None:
-    overview = dash_figs.make_protocol_rates_fig(protocol_rates)
+    overview = figures.make_protocol_rates_fig(protocol_rates)
     assert isinstance(overview, Figure)
     assert {trace.name for trace in overview.data} == {"f_miss_block5", "f_miss_clq14"}
-    selected = dash_figs.make_protocol_rates_fig(protocol_rates, feature="f_miss_clq14")
+    selected = figures.make_protocol_rates_fig(protocol_rates, feature="f_miss_clq14")
     assert {trace.name for trace in selected.data} >= {"f_miss_clq14", "UCL", "LCL", "Beyond UCL"}
 
 
 def test_protocol_rates_reject_unknown_feature(protocol_rates: pd.DataFrame) -> None:
     with pytest.raises(ValueError, match="unknown protocol feature"):
-        dash_figs.make_protocol_rates_fig(protocol_rates, feature="f_nope")
+        figures.make_protocol_rates_fig(protocol_rates, feature="f_nope")
 
 
 def test_row_missing_marks_beyond_ucl(row_missing: pd.DataFrame) -> None:
-    fig = dash_figs.make_row_missing_fig(row_missing)
+    fig = figures.make_row_missing_fig(row_missing)
     assert isinstance(fig, Figure)
     assert {trace.name for trace in fig.data} >= {"f_row_missing_rate", "Beyond UCL"}
 
 
 def test_imr_returns_three_panel_figure(imr: pd.DataFrame, limits: pd.DataFrame) -> None:
-    fig = dash_figs.make_imr_fig(imr, limits, "s003", i_hold=1, i_tail=2)
+    fig = figures.make_imr_fig(imr, limits, "s003", i_hold=1, i_tail=2)
     assert isinstance(fig, Figure)
     assert {trace.name for trace in fig.data} >= {
         "Value",
@@ -161,7 +161,7 @@ def test_imr_rejects_missing_limits(
     limits_without_s003 = limits.drop(index="s003")
 
     with pytest.raises(ValueError, match="no Phase-I limits"):
-        dash_figs.make_imr_fig(imr, limits_without_s003, "s003")
+        figures.make_imr_fig(imr, limits_without_s003, "s003")
 
 
 def test_imr_rejects_missing_series(
@@ -169,11 +169,11 @@ def test_imr_rejects_missing_series(
     limits: pd.DataFrame,
 ) -> None:
     with pytest.raises(ValueError, match="no IMR series"):
-        dash_figs.make_imr_fig(imr, limits, "s001")
+        figures.make_imr_fig(imr, limits, "s001")
 
 
 def test_drift_overview_excludes_degenerate_rows(screening: pd.DataFrame) -> None:
-    fig = dash_figs.make_drift_overview_fig(screening)
+    fig = figures.make_drift_overview_fig(screening)
     assert isinstance(fig, Figure)
     sensor_trace = fig.data[0]
     assert len(sensor_trace.x) == 2
@@ -182,7 +182,7 @@ def test_drift_overview_excludes_degenerate_rows(screening: pd.DataFrame) -> Non
 
 
 def test_queue_orders_by_rank_and_limits_display(queue: pd.DataFrame) -> None:
-    fig = dash_figs.make_queue_fig(queue, top_k=2)
+    fig = figures.make_queue_fig(queue, top_k=2)
     assert isinstance(fig, Figure)
     assert list(fig.data[0].y) == [
         "1003",
@@ -193,11 +193,11 @@ def test_queue_orders_by_rank_and_limits_display(queue: pd.DataFrame) -> None:
 
 def test_queue_rejects_missing_contract(queue: pd.DataFrame) -> None:
     with pytest.raises(ValueError, match="score queue missing columns"):
-        dash_figs.make_queue_fig(queue.drop(columns="p_cal"))
+        figures.make_queue_fig(queue.drop(columns="p_cal"))
 
 
 def test_alert_columns_are_dash_agnostic_data() -> None:
-    columns = dash_figs.make_alert_columns()
+    columns = figures.make_alert_columns()
     assert isinstance(columns, list)
     assert [column["field"] for column in columns[:3]] == ["feature", "drift", "delta"]
     assert all(isinstance(column, dict) for column in columns)

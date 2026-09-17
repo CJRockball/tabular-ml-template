@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from semcon import schema
-from semcon.scorecard import compute_panel
+from ml_template.data import schema
+from ml_template.evaluation.reports import compute_panel
 
 
 def _scores(ps: list[float]) -> pd.DataFrame:

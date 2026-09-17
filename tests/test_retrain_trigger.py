@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
-from semcon.retrain_trigger import evaluate_retrain_trigger
+from ml_template.monitoring.retraining import evaluate_retrain_trigger
 
 
 def test_evaluate_retrain_trigger_missing_file(tmp_path: Path):

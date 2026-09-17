@@ -13,10 +13,10 @@ import subprocess
 from datetime import UTC, datetime
 
 import pandas as pd
-from semcon import schema
-from semcon.db import get_engine
-from semcon.paths import DATA_RAW, LOGS
-from semcon.utils import setup_logging
+from ml_template.data import schema
+from ml_template.db.connection import get_engine
+from ml_template.paths import DATA_RAW, LOGS
+from ml_template.tracking.utils import setup_logging
 from sqlalchemy import (
     Column,
     DateTime,

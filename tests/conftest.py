@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 import pytest
-from semcon import db_ingest, schema
-from semcon.db import load_registry, register_columns
-from semcon.extract import extract
-from semcon.feature_eng import build_features
+from ml_template.data import ingest, schema
+from ml_template.db.connection import load_registry, register_columns
+from ml_template.data.extract import extract
+from ml_template.features.build import build_features
 from sqlalchemy import create_engine
 
 N_WAFERS = 20
@@ -31,9 +31,9 @@ def synthetic_env(tmp_path_factory):
     raw = tmp_path_factory.mktemp("raw")
     ts = _write_raw(raw)
     eng = create_engine(f"sqlite:///{raw / 'test.db'}")
-    db_ingest.setup_db(eng)
-    dfX, dfy = db_ingest.load_data(raw, expected_wafers=N_WAFERS)
-    db_ingest.insert_data(dfX, dfy, db_ingest.build_registry(dfX), eng, data_dir=raw)
+    ingest.setup_db(eng)
+    dfX, dfy = ingest.load_data(raw, expected_wafers=N_WAFERS)
+    ingest.insert_data(dfX, dfy, ingest.build_registry(dfX), eng, data_dir=raw)
     return eng, ts
 
 

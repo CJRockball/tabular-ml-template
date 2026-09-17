@@ -19,13 +19,13 @@ matplotlib.use("Agg")  # headless: evaluation saves figures
 import numpy as np
 import pandas as pd
 import pytest
-from semcon import train_xgb
+from ml_template.training import xgboost
 
 # ── parse_args ────────────────────────────────────────────────────────────────
 
 
 def test_parse_args_defaults():
-    args = train_xgb.parse_args([])
+    args = xgboost.parse_args([])
     assert args.use_selection is True
     assert args.repeats == 3
     assert args.overrides == []
@@ -33,7 +33,7 @@ def test_parse_args_defaults():
 
 
 def test_parse_args_flags():
-    args = train_xgb.parse_args(
+    args = xgboost.parse_args(
         ["--no-selection", "--run-name", "baseline", "--set", "max_depth=5", "--set", "eta=0.1"]
     )
     assert args.use_selection is False
@@ -57,7 +57,7 @@ def test_evaluate_writes_artifacts_and_metrics(tmp_path):
     df_train = pd.DataFrame({"is_fail": y_train})
     df_test = pd.DataFrame({"is_fail": y_hold})
 
-    metrics = train_xgb.evaluate(df_train, df_test, oof, p_hold, out=tmp_path)
+    metrics = xgboost.evaluate(df_train, df_test, oof, p_hold, out=tmp_path)
 
     expected = {
         "summary_oof.csv",

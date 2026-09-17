@@ -23,8 +23,8 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from semcon import schema
-from semcon.config import (
+from ml_template.data import schema
+from ml_template.config import (
     CV_LIMIT,
     DEVIANT_FAIL_ENRICHMENT,
     DOMINANT_FRAC,
@@ -33,7 +33,7 @@ from semcon.config import (
     MIN_DEVIANT_N,
     NAN_FRAC_MAX,
 )
-from semcon.db import (
+from ml_template.db.connection import (
     assert_schema,
     export_registry_csv,
     feature_columns,
@@ -41,10 +41,10 @@ from semcon.db import (
     load_registry,
     retire_columns,
 )
-from semcon.extract import extract
-from semcon.paths import ARTIFACTS, LOGS
-from semcon.tracking import write_dataset_card
-from semcon.utils import setup_logging
+from ml_template.data.extract import extract
+from ml_template.paths import ARTIFACTS, LOGS
+from ml_template.tracking.runs import write_dataset_card
+from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("semcon")
 

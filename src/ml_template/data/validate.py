@@ -23,11 +23,12 @@ import re
 import numpy as np
 import pandas as pd
 import pandera.pandas as pa
-from semcon import schema, tracking
-from semcon.db import get_engine, register_columns
-from semcon.extract import extract
-from semcon.paths import DATA, LOGS
-from semcon.utils import setup_logging
+from ml_template.data import schema
+from ml_template.db.connection import get_engine, register_columns
+from ml_template.data.extract import extract
+from ml_template.paths import DATA, LOGS
+from ml_template.tracking.utils import setup_logging
+from ml_template.tracking import runs
 
 logger = logging.getLogger("semcon")
 
@@ -138,12 +139,12 @@ def main(argv=None):
         "drift_flags": n_flags,
     }
 
-    run_dir, meta = tracking.make_run(
+    run_dir, meta = runs.make_run(
         config={"script": "validate", "drift_flag": DRIFT_FLAG}, run_name="validate", note=args.note
     )
     drift.to_csv(run_dir / "missingness_drift.csv")
     (run_dir / "validation_report.json").write_text(json.dumps(report, indent=2))
-    tracking.append_index(run_dir, {"type": "validate", **report, "git_sha": meta["git_sha"]})
+    runs.append_index(run_dir, {"type": "validate", **report, "git_sha": meta["git_sha"]})
 
     logger.info(f"[validate] {report}")
     if n_flags:

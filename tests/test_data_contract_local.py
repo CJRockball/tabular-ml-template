@@ -5,10 +5,10 @@ Run: uv run pytest -m local_data
 
 import pandas as pd
 import pytest
-from semcon import schema
-from semcon.db import feature_columns, get_engine, load_registry
-from semcon.extract import extract
-from semcon.feature_eng import build_features
+from ml_template.data import schema
+from ml_template.db.connection import feature_columns, get_engine, load_registry
+from ml_template.data.extract import extract
+from ml_template.features.build import build_features
 
 pytestmark = pytest.mark.local_data  # every test in this file gets the tag
 

@@ -2,7 +2,7 @@
 import tomllib
 
 from pydantic import BaseModel, ConfigDict, Field
-from semcon.paths import ROOT
+from ml_template.paths import ROOT
 
 # --- Data decisions (frozen after EDA; see validation.md) ---
 CUTOFF = "2008-10-05 05:30:00"  # pd.Timestamp(...) once EDA decides; None = full frame, split='unassigned'

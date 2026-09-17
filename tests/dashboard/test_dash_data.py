@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from semcon import dash_data
+from ml_template.dashboard import data
 
 SCREENING_COLS = [
     "feature",
@@ -149,7 +149,7 @@ def artifacts(tmp_path: Path) -> Path:
 
 
 def test_latest_monitor_run_is_last_registry_row(artifacts: Path) -> None:
-    run = dash_data.latest_monitor_run(artifacts / "index_monitor.csv")
+    run = data.latest_monitor_run(artifacts / "index_monitor.csv")
     assert run["run_id"] == NEWEST
     assert run["meta"]["n_drift"] == 11
     assert run["path"] == artifacts / "runs" / NEWEST
@@ -157,30 +157,30 @@ def test_latest_monitor_run_is_last_registry_row(artifacts: Path) -> None:
 
 def test_missing_registry_raises_clear_error(artifacts: Path) -> None:
     with pytest.raises(FileNotFoundError, match="registry not found"):
-        dash_data.latest_monitor_run(artifacts / "nope.csv")
+        data.latest_monitor_run(artifacts / "nope.csv")
 
 
 def test_pointer_manifest_wins_over_default_name(artifacts: Path) -> None:
     run = _run(artifacts, NEWEST)
     assert not (run["path"] / "spc_screening.csv").exists()
-    df = dash_data.load_screening(run)
+    df = data.load_screening(run)
     assert df.loc["s003", "delta"] == pytest.approx(0.30)
 
 
 def test_default_name_fallback_without_manifest(artifacts: Path) -> None:
     run = _run(artifacts, OLDER)
     assert not (run["path"] / "files.json").exists()
-    df = dash_data.load_screening(run)
+    df = data.load_screening(run)
     assert len(df) == 3
 
 
 def test_unknown_artifact_role_raises_with_known_list(artifacts: Path) -> None:
     with pytest.raises(ValueError, match="unknown artifact role"):
-        dash_data.resolve_artifact(_run(artifacts), "wafer_map")
+        data.resolve_artifact(_run(artifacts), "wafer_map")
 
 
 def test_load_screening_dtypes_and_degenerate_nan(artifacts: Path) -> None:
-    df = dash_data.load_screening(_run(artifacts, OLDER))
+    df = data.load_screening(_run(artifacts, OLDER))
     assert df.loc["s002", "degenerate"]
     assert pd.isna(df.loc["s002", "delta"])
     assert df["ooc_p1"].dtype.kind == "f"
@@ -189,49 +189,49 @@ def test_load_screening_dtypes_and_degenerate_nan(artifacts: Path) -> None:
 def test_load_screening_missing_file_raises(artifacts: Path) -> None:
     orphan = _run(artifacts, "20990101_000000_spc")
     with pytest.raises(FileNotFoundError, match="role 'screening'"):
-        dash_data.load_screening(orphan)
+        data.load_screening(orphan)
 
 
 def test_drift_table_flags_and_orders(artifacts: Path) -> None:
-    df = dash_data.load_drift_table(_run(artifacts), delta_min=0.05)
+    df = data.load_drift_table(_run(artifacts), delta_min=0.05)
     assert list(df.index) == ["s003", "s001"]
     assert df["drift"].tolist() == [True, False]
     assert "s002" not in df.index
 
 
 def test_load_pchart_has_windowed_limits(artifacts: Path) -> None:
-    df = dash_data.load_pchart(_run(artifacts))
+    df = data.load_pchart(_run(artifacts))
     assert list(df.columns) == ["x", "rate", "n", "lcl", "ucl", "p0"]
     assert df["rate"].tolist() == [0.05, 0.10]
 
 
 def test_load_protocol_rates_long_format(artifacts: Path) -> None:
-    df = dash_data.load_protocol_rates(_run(artifacts))
+    df = data.load_protocol_rates(_run(artifacts))
     assert set(df["feature"]) == {"f_miss_clq14", "f_miss_block5"}
     assert len(df) == 4
 
 
 def test_load_protocol_row_missing_series(artifacts: Path) -> None:
-    df = dash_data.load_protocol_row_missing(_run(artifacts))
+    df = data.load_protocol_row_missing(_run(artifacts))
     assert df["value"].max() == 0.50
     assert (df["value"] > df["ucl"]).sum() == 1
 
 
 def test_load_imr_series_filter_and_unknown_feature(artifacts: Path) -> None:
     run = _run(artifacts)
-    full = dash_data.load_imr_series(run)
+    full = data.load_imr_series(run)
     assert set(full["feature"]) == {"s001", "s003"}
-    one = dash_data.load_imr_series(run, "s003")
+    one = data.load_imr_series(run, "s003")
     assert one["t"].tolist() == [0, 1, 2]
     assert one["r1"].tolist() == [False, False, True]
     with pytest.raises(ValueError, match="showcase features"):
-        dash_data.load_imr_series(run, "s999")
+        data.load_imr_series(run, "s999")
 
 
 def test_score_queue_respects_persisted_rank(artifacts: Path) -> None:
-    batch = dash_data.latest_score_batch(artifacts / "scores")
-    assert dash_data.run_label(batch) == "holdout_replay"
-    q = dash_data.load_score_queue(batch, top_k=1)
+    batch = data.latest_score_batch(artifacts / "scores")
+    assert data.run_label(batch) == "holdout_replay"
+    q = data.load_score_queue(batch, top_k=1)
     assert q["wafer_id"].tolist() == [1002, 1003, 1001]
     assert q["rank"].tolist() == [1, 2, 3]
     assert q["in_top_k"].tolist() == [True, False, False]
@@ -239,17 +239,17 @@ def test_score_queue_respects_persisted_rank(artifacts: Path) -> None:
 
 
 def test_score_queue_score_col_contract(artifacts: Path) -> None:
-    batch = dash_data.latest_score_batch(artifacts / "scores")
-    q = dash_data.load_score_queue(batch)
+    batch = data.latest_score_batch(artifacts / "scores")
+    q = data.load_score_queue(batch)
     assert "p_cal" in q.columns
     with pytest.raises(ValueError, match="score_col 'nope'"):
-        dash_data.load_score_queue(batch, score_col="nope")
+        data.load_score_queue(batch, score_col="nope")
 
 
 def test_list_figures_and_batch_summary(artifacts: Path) -> None:
-    figs = dash_data.list_figures(_run(artifacts))
+    figs = data.list_figures(_run(artifacts))
     assert "yield_pchart" in figs
-    batch = dash_data.latest_score_batch(artifacts / "scores")
-    summary = dash_data.load_batch_summary(batch)
+    batch = data.latest_score_batch(artifacts / "scores")
+    summary = data.load_batch_summary(batch)
     assert summary["scorecard"]["pr_auc"] == pytest.approx(0.098)
     assert summary["reconciliation"]["max_abs_diff"] == 0.0

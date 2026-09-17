@@ -20,9 +20,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from semcon import schema
-from semcon.config import CUTOFF, load_config, parse_overrides
-from semcon.db import (
+from ml_template.data import schema
+from ml_template.config import CUTOFF, load_config, parse_overrides
+from ml_template.db.connection import (
     assert_schema,
     data_fingerprint,
     feature_columns,
@@ -30,7 +30,7 @@ from semcon.db import (
     load_registry,
     register_columns,
 )
-from semcon.evaluation import (
+from ml_template.evaluation.metrics import (
     classification_summary,
     operating_points,
     recall_at_flagrate,
@@ -38,15 +38,15 @@ from semcon.evaluation import (
     save_pr_curve,
     tune_threshold,
 )
-from semcon.explain import save_shap_plots
-from semcon.extract import extract
-from semcon.feature_eng import build_features
-from semcon.paths import LOGS
-from semcon.selection import select_features
-from semcon.snapshots import write_gold_snapshot
-from semcon.tracking import append_index, make_run, save_features, save_splits
-from semcon.utils import setup_logging
-from semcon.validate import ensure_is_fail
+from ml_template.evaluation.explain import save_shap_plots
+from ml_template.data.extract import extract
+from ml_template.features.build import build_features
+from ml_template.paths import LOGS
+from ml_template.features.selection import select_features
+from ml_template.data.snapshots import write_gold_snapshot
+from ml_template.tracking.runs import append_index, make_run, save_features, save_splits
+from ml_template.tracking.utils import setup_logging
+from ml_template.data.validate import ensure_is_fail
 from sklearn.metrics import (
     average_precision_score,
     brier_score_loss,

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "semcon"
+name = "tabular-ml-template"
 version = "0.1.0"
 description = "Setting up a template for a full ml pipeline."
 readme = "README.md"
@@ -46,7 +46,6 @@ dependencies = [
     "shap>=0.45",
     "jupyterlab>=4.0",
     "ipykernel>=6.27",
-    "pydoe3>=1.6.2",
     "dash>=3.4,<4",
     "plotly>=6,<7",
     "dash-ag-grid>=33",
@@ -62,33 +61,15 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/CJRockball/semcon"
+Repository = "https://github.com/CJRockball/tabular-ml-template"
 
-# Proper src layout: modules live in src/semcon/, so the installed
-# package is `semcon` (not `src`).
+# Proper src layout: modules live in src/ml_template/, so the installed
+# package is `ml_template` (not `src`).
 [tool.hatch.build.targets.wheel]
-packages = ["src/semcon"]
+packages = ["src/ml_template"]
 
 [project.scripts]
-semcon-ingest = "semcon.db_ingest:main"
-semcon-extract = "semcon.extract:main"
-semcon-validate = "semcon.validate:main"
-semcon-explore = "semcon.explore:main"
-semcon-features = "semcon.feature_eng:main"
-semcon-train_xgb = "semcon.train_xgb:main"
-semcon-calibrate = "semcon.calibrate:main"
-semcon-simulate = "semcon.simulate_lots:main"
-semcon-score = "semcon.score:main"
-semcon-scorecard = "semcon.scorecard:main"
-semcon-monitor = "semcon.monitor:main"
-semcon-retrain-trigger = "semcon.retrain_trigger:main"
 
-semcon-doe-design = "semcon.doe_design:main"
-semcon-doe-run = "semcon.doe_run:main"
-semcon-doe-analyze = "semcon.doe_analyze:main"
-semcon-spc = "semcon.spc:main"
-semcon-sarimax = "semcon.sarimax:main"
-semcon-dash = "semcon.dash_app:main"
 
 [tool.ruff]
 target-version = "py311"
