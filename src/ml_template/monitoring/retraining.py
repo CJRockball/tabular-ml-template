@@ -8,7 +8,7 @@ Exit codes for CI / Makefile composition:
   0: IN_CONTROL (no retrain needed)
   1: RETRAIN_RECOMMENDED (alarm delta threshold exceeded)
 
-Entry point: semcon-retrain-trigger = semcon.retrain_trigger:main
+Entry point: project-retrain-trigger = project.retrain_trigger:main
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import pandas as pd
 from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 INDEX_MONITOR = ARTIFACTS / "index_monitor.csv"
 DECISION_DIR = ARTIFACTS / "retrain"

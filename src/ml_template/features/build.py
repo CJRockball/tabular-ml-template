@@ -23,7 +23,7 @@ from ml_template.db.connection import assert_schema, get_engine, register_column
 from ml_template.paths import LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def build_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:

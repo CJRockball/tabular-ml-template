@@ -1,4 +1,4 @@
-"""Pure Plotly figures for the semcon monitoring dashboard.
+"""Pure Plotly figures for the project monitoring dashboard.
 
 This is the presentation layer between dash_data.py and dash_app.py:
 - accepts already-loaded pandas DataFrames only

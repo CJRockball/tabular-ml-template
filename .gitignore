@@ -1,4 +1,4 @@
-# semcon .gitignore — trimmed to what this project actually produces.
+# The .gitignore — trimmed to what this project actually produces.
 # Policy: code, manifests, and the column registry live in git;
 # raw data, the SQLite DB, and snapshot Parquet files do not (see data/README.md).
 

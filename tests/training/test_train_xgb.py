@@ -1,4 +1,4 @@
-"""Tests for semcon.train_xgb.
+"""Tests for ml_template.training.xgboost..
 
 Scope: the pure and CPU-only parts of the training pipeline. run_cv and
 refit_final fit XGBoost with device='cuda' and are deliberately not

@@ -5,17 +5,18 @@ build-backend = "hatchling.build"
 [project]
 name = "tabular-ml-template"
 version = "0.1.0"
-description = "Setting up a template for a full ml pipeline."
+description = "A reproducible template for tabular machine-learning projects."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Patrick Carlberg" }]
 keywords = [
-    "tabular ml",
-    "template",
-    "xgboost",
     "machine-learning",
-    "smart-manufacturing",
+    "tabular-data",
+    "mlops",
+    "experiment-tracking",
+    "reproducibility",
+    "xgboost",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -31,18 +32,16 @@ classifiers = [
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
-    "pyarrow>=15.0", # parquet I/O in explore.py / xgb scripts
+    "pyarrow>=15.0", # parquet I/O 
     "scikit-learn>=1.4,<2.0", # RepeatedStratifiedKFold, metrics, mutual_info
     "xgboost==2.1.1", # 2.x callback API (EarlyStopping save_best)
     "scipy>=1.11", # spearmanr, connected_components, stats
     "matplotlib>=3.8",
-    "seaborn>=0.13", # EDA notebook
+    "seaborn>=0.13", 
     "pydantic>=2.0,<3.0",
     "SQLAlchemy>=2.0,<2.1",
     "pandera>=0.33.1",
     "statsmodels>=0.14",
-    "pulp>=2.8",
-    "simpy>=4.1",
     "shap>=0.45",
     "jupyterlab>=4.0",
     "ipykernel>=6.27",
@@ -83,8 +82,8 @@ ignore = ["E501"]  # line length handled by the formatter
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-markers =[
-    "local_data: requires the real SECOM database; run locally only",
+markers = [
+    "local_data: requires local data files and is excluded from default CI",
 ]
 
 [tool.mypy]

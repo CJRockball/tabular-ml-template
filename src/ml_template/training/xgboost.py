@@ -56,7 +56,7 @@ from ml_template.paths import LOGS
 from ml_template.tracking.runs import append_index, make_run, save_features, save_splits
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def parse_args(argv=None):

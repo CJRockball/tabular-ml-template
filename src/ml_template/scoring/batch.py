@@ -6,7 +6,7 @@ The run registry doubles as the model store: --run <id> or the latest training
 run in index.csv; the Platt calibrator is resolved through the
 type='calibration' + parent_run linkage.
 
-Entry point: semcon-score = semcon.score:main
+Entry point: project-score = project.score:main
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from ml_template.features.build import build_features
 from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 RUNS = ARTIFACTS / "runs"
 SCORES = ARTIFACTS / "scores"

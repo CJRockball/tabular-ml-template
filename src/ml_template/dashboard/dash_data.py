@@ -1,4 +1,4 @@
-"""Artifact loaders for the semcon monitoring dashboard.
+"""Artifact loaders for the project monitoring dashboard.
 
 Pure consumer layer: this module reads what the pipeline persisted and
 returns plain pandas objects. It never recomputes SPC statistics, never
@@ -16,7 +16,7 @@ import pandas as pd
 
 from ml_template.paths import ARTIFACTS
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 PATHS = {
     "monitor_index": ARTIFACTS / "index_monitor.csv",

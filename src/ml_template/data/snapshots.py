@@ -24,7 +24,7 @@ from ml_template.db.connection import data_fingerprint, load_registry
 from ml_template.paths import ROOT
 from ml_template.tracking.runs import write_dataset_card
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 SNAPSHOTS = ROOT / "data" / "snapshots"
 

@@ -1,4 +1,4 @@
-"""Dash application for semcon process and model monitoring.
+"""Dash application for project process and model monitoring.
 
 This is the only dashboard module that imports Dash. It owns the browser:
 layout, callbacks, CLI, and the optional artifacts-root override.
@@ -24,7 +24,7 @@ from dash import Dash, Input, Output, dcc, html
 from ml_template.dashboard import dash_data, dash_figs
 from ml_template.paths import ARTIFACTS
 
-APP_TITLE = "semcon | Process & Model Monitoring"
+APP_TITLE = "project | Process & Model Monitoring"
 REFRESH_MS = 30_000
 TOP_K = 20
 
@@ -428,7 +428,7 @@ def create_app(artifacts: Path | None = None) -> Dash:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch the semcon monitoring dashboard")
+    parser = argparse.ArgumentParser(description="Launch the project monitoring dashboard")
     parser.add_argument(
         "--artifacts",
         type=Path,

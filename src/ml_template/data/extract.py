@@ -16,7 +16,7 @@ from ml_template.db.connection import get_engine, register_columns, run_query
 from ml_template.paths import LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def extract(

@@ -42,7 +42,7 @@ from ml_template.db.connection import get_engine
 from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------- cli

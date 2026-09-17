@@ -31,7 +31,7 @@ from ml_template.paths import DATA, LOGS
 from ml_template.tracking import runs
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 SPLIT_LABELS = frozenset({"cv", "holdout", "unassigned", "excluded"})
 DRIFT_FLAG = 0.02  # missingness delta (fraction) worth a report line

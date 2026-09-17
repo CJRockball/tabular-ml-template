@@ -10,7 +10,7 @@ from ml_template.data import schema
 from ml_template.data.extract import extract
 from ml_template.db.connection import get_engine
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def load_data():

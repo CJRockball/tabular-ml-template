@@ -4,7 +4,7 @@ Deliberately not MLflow. For tens of runs, a folder per run plus an
 append-only index is enough — every artifact stays diffable plain text
 and there is no server to maintain.
 
-Design rule: this module must stay project-agnostic (the only semcon
+Design rule: this module must stay project-agnostic (the only file
 dependency is the ARTIFACTS default). tracking.py + paths.py + utils.py
 are the reusable kernel for future projects.
 

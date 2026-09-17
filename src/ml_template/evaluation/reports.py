@@ -10,7 +10,7 @@ Metric definitions match training by construction — capture uses the same
 recall_at_flagrate as evaluation.py, so serving and evaluation numbers are
 definitionally identical.
 
-Entry point: semcon-scorecard = semcon.scorecard:main
+Entry point: project-scorecard = project.scorecard:main
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from ml_template.paths import LOGS
 from ml_template.scoring.batch import SCORES, append_index, git_sha
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 FLAG_RATES = (0.05, 0.10)  # fixed grid — comparable across batches without run archaeology
 

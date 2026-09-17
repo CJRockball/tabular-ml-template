@@ -12,7 +12,7 @@ def setup_logging(level: int = logging.INFO, logfile: str | Path | None = None) 
     A new logfile argument is honored on ANY call — its FileHandler is added
     unless a handler for that exact path already exists.
     """
-    logger = logging.getLogger("semcon")
+    logger = logging.getLogger(__name__)
     logger.setLevel(level)
     logger.propagate = False  # don't double-print through root
 

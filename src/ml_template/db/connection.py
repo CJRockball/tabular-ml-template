@@ -13,7 +13,7 @@ from sqlalchemy import Engine, bindparam, create_engine, inspect, text
 from ml_template.data import schema
 from ml_template.paths import ROOT, SQL
 
-DB_PATH = ROOT / "data" / "secom.db"
+DB_PATH = ROOT / "data" / "project.db"
 REQUIRED_TABLES = {"sensor_readings", "wafer_labels", "column_registry", "ingestion_log"}
 
 
@@ -33,7 +33,7 @@ def assert_schema(engine: Engine) -> None:
     if missing:
         raise RuntimeError(
             f"DB at {engine.url} is missing tables {sorted(missing)} — stale "
-            "schema. Rebuild: rm data/secom.db && python -m semcon.db_ingest"
+            "schema. Rebuild: rm data/project.db && python -m project.db_ingest"
         )
 
 

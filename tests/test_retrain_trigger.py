@@ -1,4 +1,4 @@
-"""Unit tests for semcon.retrain_trigger (Item 9)."""
+"""Unit tests for ml_template.monitor.retrain_trigger (Item 9)."""
 
 from __future__ import annotations
 

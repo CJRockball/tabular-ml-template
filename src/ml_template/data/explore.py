@@ -47,7 +47,7 @@ from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.runs import write_dataset_card
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def assess_quality(df: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, list[str]]]:

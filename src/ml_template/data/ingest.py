@@ -30,7 +30,7 @@ from ml_template.db.connection import get_engine
 from ml_template.paths import DATA_RAW, LOGS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger("semcon")
+logger = logging.getLogger(__name__)
 
 
 def file_sha256(path, chunk_size: int = 1 << 20) -> str:
