@@ -1,0 +1,113 @@
+"""Database access — the only module that talks to SQLite.
+
+One engine factory, one query runner, one registry loader, one
+registration helper. All other modules import from here.
+"""
+
+import hashlib
+from pathlib import Path
+
+import pandas as pd
+from sqlalchemy import Engine, bindparam, create_engine, inspect, text
+
+from semcon import schema
+from semcon.paths import ROOT, SQL
+
+DB_PATH = ROOT / "data" / "secom.db"
+REQUIRED_TABLES = {"sensor_readings", "wafer_labels", "column_registry", "ingestion_log"}
+
+
+def get_engine(db_path: Path = DB_PATH) -> Engine:
+    """Pass db_path=tmp_path/'test.db' in tests; production code passes nothing."""
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    return create_engine(f"sqlite:///{db_path}", echo=False)
+
+
+def assert_schema(engine: Engine) -> None:
+    """Fail loudly and helpfully on stale-schema databases.
+
+    The DB is a derived artifact: when in doubt, rebuild it.
+    Call from readers, never from db_ingest (which creates the schema).
+    """
+    missing = REQUIRED_TABLES - set(inspect(engine).get_table_names())
+    if missing:
+        raise RuntimeError(
+            f"DB at {engine.url} is missing tables {sorted(missing)} — stale "
+            "schema. Rebuild: rm data/secom.db && python -m semcon.db_ingest"
+        )
+
+
+def run_query(name: str, engine: Engine, **params) -> pd.DataFrame:
+    """Run sql/<name>.sql with named parameters. The filename is the query name."""
+    query = (SQL / f"{name}.sql").read_text()
+    return pd.read_sql(text(query), engine, params=params)
+
+
+def export_registry_csv(engine: Engine) -> None:
+    """Write data/column_registry.csv for git-visible review of flips."""
+    load_registry(engine).to_csv(ROOT / "data" / "column_registry.csv", index=False)
+
+
+def load_registry(engine: Engine) -> pd.DataFrame:
+    return pd.read_sql(text("SELECT * FROM column_registry"), engine)
+
+
+def feature_columns(registry: pd.DataFrame) -> list[str]:
+    """The inclusion contract: active features only.
+
+    X is always built from this list, never by dropping known non-features.
+    """
+    mask = registry["role"].isin([schema.Role.FEATURE_RAW.value, schema.Role.FEATURE_ENG.value]) & (
+        registry["status"] == schema.Status.ACTIVE.value
+    )
+    return registry.loc[mask, "column_name"].tolist()
+
+
+def register_columns(rows: list[dict], engine: Engine) -> None:
+    """Upsert registry rows. Convention: whoever creates a column registers it."""
+    if not rows:
+        return
+    names = [r["column_name"] for r in rows]
+    with engine.begin() as conn:
+        conn.execute(
+            text("DELETE FROM column_registry WHERE column_name IN :names").bindparams(
+                bindparam("names", expanding=True)
+            ),
+            {"names": names},
+        )
+        pd.DataFrame(rows).to_sql("column_registry", conn, if_exists="append", index=False)
+
+
+def retire_columns(names: list[str], reason: str, engine: Engine) -> None:
+    """Mark registry columns excluded, with the reason. Frames never lose
+    columns mid-pipeline — removal is a status change, not a deletion."""
+    if not names:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE column_registry SET status = :status, notes = :reason "
+                "WHERE column_name IN :names"
+            ).bindparams(bindparam("names", expanding=True)),
+            {"status": schema.Status.EXCLUDED.value, "reason": reason, "names": names},
+        )
+
+
+def data_fingerprint(engine: Engine) -> dict:
+    """Content fingerprint of the data basis: latest raw-file hashes from
+    ingestion_log plus the extraction-SQL hash.
+
+    Recompute-to-verify: a changed fingerprint means the data basis moved.
+    Config decisions are NOT hashed here — the snapshot manifest records
+    them verbatim, readable without a decoder.
+    """
+    log = pd.read_sql(
+        text(
+            "SELECT source_file, source_sha256 FROM ingestion_log "
+            "ORDER BY ingest_id DESC LIMIT 2"  # one row per source file
+        ),
+        engine,
+    )
+    raw = dict(zip(log["source_file"], log["source_sha256"], strict=True))
+    sql_hash = hashlib.sha256((SQL / "extract_wafers.sql").read_bytes()).hexdigest()
+    return {"raw": raw, "extract_sql_sha256": sql_hash}
