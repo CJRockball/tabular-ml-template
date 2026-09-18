@@ -1,0 +1,33 @@
+project:
+  name: ai4i-predictive-maintenance
+  description: Binary machine-failure prediction using the AI4I 2020 dataset
+
+paths:
+  database: data/project.db
+  raw_data: data/raw
+  processed_data: data/processed
+  artifacts: artifacts
+  logs: logs
+
+data:
+  adapter: ai4i
+  source: tests/fixtures/ai4i_small.csv
+  format: csv
+  entity_id: UDI
+  target: Machine failure
+  task: binary_classification
+
+validation:
+  required_columns:
+    - UDI
+    - Product ID
+    - Type
+    - Air temperature [K]
+    - Process temperature [K]
+    - Rotational speed [rpm]
+    - Torque [Nm]
+    - Tool wear [min]
+    - Machine failure
+  allowed_target_values: [0, 1]
+  require_unique_entity_id: true
+  max_missing_rate: 0.0
