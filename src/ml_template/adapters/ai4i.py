@@ -1,8 +1,9 @@
 # src/ml_template/adapters/ai4i.py
 from __future__ import annotations
 
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
 
 AI4I_REQUIRED_COLUMNS = {
     "UDI",

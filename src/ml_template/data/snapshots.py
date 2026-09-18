@@ -14,7 +14,7 @@ import hashlib
 import io
 import json
 import logging
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pandas as pd
 from sqlalchemy import Engine

@@ -3,16 +3,17 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from IPython.display import display
 import pandas as pd
+from IPython.display import display
 
 from ml_template.config import DATA_NAME
-from ml_template.paths import DATA_RAW, ARTIFACTS
+from ml_template.paths import ARTIFACTS, DATA_RAW
+
 
 # %%
 @dataclass(frozen=True)
@@ -124,15 +125,13 @@ proposed_schema = ProposedCanonicalSchema(
 
 report = SourceInspectionReport(
     report_version=1,
-    created_at_utc=datetime.now(timezone.utc).isoformat(),
+    created_at_utc=datetime.now(UTC).isoformat(),
     source=source_meta,
     observed_schema=observed_schema,
     proposed_canonical_schema=proposed_schema,
 )
 
 # %%
-from ml_template.paths import ARTIFACTS
-
 short_hash = report.source.source_sha256[:12]
 artifact_path = ARTIFACTS / "inspection" / f"{source_path.stem}__sha256-{short_hash}.json"
 report.save(artifact_path)
