@@ -1,0 +1,98 @@
+{
+  "report_version": 1,
+  "created_at_utc": "2026-09-18T06:45:43.472424+00:00",
+  "source": {
+    "source_name": "ai4i2020.csv",
+    "source_path": "/home/python_user/coding/ds/tabular-ml-template/data/raw/ai4i2020.csv",
+    "source_size_bytes": 522048,
+    "source_sha256": "dc6630cd9b1f0f853922fad78a1b6436570d3f1ec863f1dd5c4340ac56bc8a8e",
+    "encoding": "utf-8",
+    "delimiter": ","
+  },
+  "observed_schema": {
+    "row_count": 10000,
+    "column_count": 14,
+    "headers": [
+      "UDI",
+      "Product ID",
+      "Type",
+      "Air temperature [K]",
+      "Process temperature [K]",
+      "Rotational speed [rpm]",
+      "Torque [Nm]",
+      "Tool wear [min]",
+      "Machine failure",
+      "TWF",
+      "HDF",
+      "PWF",
+      "OSF",
+      "RNF"
+    ],
+    "pandas_inferred_dtypes": {
+      "UDI": "int64",
+      "Product ID": "str",
+      "Type": "str",
+      "Air temperature [K]": "float64",
+      "Process temperature [K]": "float64",
+      "Rotational speed [rpm]": "int64",
+      "Torque [Nm]": "float64",
+      "Tool wear [min]": "int64",
+      "Machine failure": "int64",
+      "TWF": "int64",
+      "HDF": "int64",
+      "PWF": "int64",
+      "OSF": "int64",
+      "RNF": "int64"
+    },
+    "null_counts": {
+      "UDI": 0,
+      "Product ID": 0,
+      "Type": 0,
+      "Air temperature [K]": 0,
+      "Process temperature [K]": 0,
+      "Rotational speed [rpm]": 0,
+      "Torque [Nm]": 0,
+      "Tool wear [min]": 0,
+      "Machine failure": 0,
+      "TWF": 0,
+      "HDF": 0,
+      "PWF": 0,
+      "OSF": 0,
+      "RNF": 0
+    },
+    "flag_cardinality": {
+      "Machine failure": 2,
+      "TWF": 2,
+      "HDF": 2,
+      "PWF": 2,
+      "OSF": 2,
+      "RNF": 2
+    }
+  },
+  "proposed_canonical_schema": {
+    "dtypes": {
+      "UDI": "Int64",
+      "Product ID": "str",
+      "Type": "str",
+      "Air temperature [K]": "float64",
+      "Process temperature [K]": "float64",
+      "Rotational speed [rpm]": "int64",
+      "Torque [Nm]": "float64",
+      "Tool wear [min]": "int64",
+      "Machine failure": "Int8",
+      "TWF": "Int8",
+      "HDF": "Int8",
+      "PWF": "Int8",
+      "OSF": "Int8",
+      "RNF": "Int8"
+    },
+    "binary_flags": [
+      "Machine failure",
+      "TWF",
+      "HDF",
+      "PWF",
+      "OSF",
+      "RNF"
+    ]
+  }
+}

@@ -40,7 +40,7 @@ def write_gold_snapshot(df: pd.DataFrame, engine: Engine, config: dict | None = 
     payload = buf.getvalue()
     sha = hashlib.sha256(payload).hexdigest()
 
-    snapshot_id = f"{datetime.now(UTC):%Y%m%d_%H%M%S}_{sha[:8]}"
+    snapshot_id = f"{datetime.now():%Y%m%d_%H%M%S}_{sha[:8]}"
     out = SNAPSHOTS / "gold" / snapshot_id
     out.mkdir(parents=True, exist_ok=False)
 
@@ -51,7 +51,7 @@ def write_gold_snapshot(df: pd.DataFrame, engine: Engine, config: dict | None = 
     manifest = {
         "snapshot_id": snapshot_id,
         "layer": "gold",
-        "created": ts if (ts := datetime.now(UTC)) else None,
+        "created": ts if (ts := datetime.now()) else None,
         "rows": int(df.shape[0]),
         "cols": int(df.shape[1]),
         "git_sha": git_sha(),
