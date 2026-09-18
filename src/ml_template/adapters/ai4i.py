@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+from pathlib import Path
 
 AI4I_REQUIRED_COLUMNS = {
     "UDI",
@@ -28,7 +29,7 @@ COLUMN_RENAMES = {
 }
 
 
-def load_and_normalize(path: str) -> pd.DataFrame:
+def load_and_normalize(path: Path) -> pd.DataFrame:
     frame = pd.read_csv(path)
 
     missing = AI4I_REQUIRED_COLUMNS.difference(frame.columns)
