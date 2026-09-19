@@ -257,7 +257,7 @@ def main(argv=None) -> None:
     conf_path = Path(args.data_config)
     with conf_path.open("r", encoding="utf-8") as file:
         data_config = yaml.safe_load(file)
-    dfX = load_data(data_config=data_config)
+    _ = load_data(data_config=data_config)
 
     # registry = build_registry(dfX)
     # insert_data(dfX, dfy, registry, engine)
