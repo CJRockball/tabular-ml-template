@@ -3,6 +3,7 @@
 
 import enum
 
+
 class Role(enum.StrEnum):
     IDENTIFIER = "identifier"
     MEASUREMENT = "measurement"

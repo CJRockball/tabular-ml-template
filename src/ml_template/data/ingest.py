@@ -12,7 +12,7 @@ import hashlib
 import json
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -32,10 +32,10 @@ from sqlalchemy import (
 
 from ml_template.data.schema import Role, Status
 from ml_template.db.connection import get_engine
-from ml_template.paths import ARTIFACTS, LOGS
+from ml_template.paths import ARTIFACTS
 from ml_template.tracking.utils import setup_logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ml_template.data.ingest")
 
 # Map proposed string types to SQLAlchemy column types
 TYPE_MAP = {
@@ -203,7 +203,7 @@ def build_registry(
     required_cols = set(contract.get("required_columns", df.columns.tolist()))
     descriptions = contract.get("column_descriptions", {})
 
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     rows = []
 
     for idx, col in enumerate(df.columns):
@@ -248,7 +248,7 @@ def insert_data(
     df_to_insert.insert(0, "dataset_version_id", dataset_version_id)
 
     # 2. Build single-row ingestion log dataframe
-    completed_at = datetime.now(timezone.utc)
+    completed_at = datetime.now(UTC)
     source_path_val = str(data_config["data"]["source"])
     source_name_val = Path(source_path_val).name
 
@@ -311,10 +311,11 @@ def parse_args(argv=None):
 
 def main(argv=None) -> None:
     args = parse_args(argv)
-    setup_logging(logfile=LOGS / "db_ingest.log")
-    logger.info("[db_ingest] Started ingestion")
+    # Sets up console + logs/app/pipeline.log
+    setup_logging()
+    logger.info("[ingest] Started raw data ingestion")
 
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
 
     conf_path = Path(args.data_config)
     with conf_path.open("r", encoding="utf-8") as file:
