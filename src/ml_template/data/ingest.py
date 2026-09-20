@@ -1,8 +1,8 @@
-"""Ingest raw SECOM files into SQLite (bronze layer).
+"""Ingest raw data files into SQLite (bronze layer).
 
-Raw copy only: type coercion, no value transforms. Labels stay -1/1;
-encoding happens downstream. Registers every raw column in
-column_registry. Convention: whoever creates a column registers it.
+Raw copy with lineage: adds dataset_version_id and source_row_number.
+Registers every raw column in column_registry and logs ingestion event
+in ingestion_log.
 """
 
 from __future__ import annotations
@@ -12,12 +12,13 @@ import hashlib
 import json
 import logging
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
 import yaml
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Engine,
@@ -29,33 +30,38 @@ from sqlalchemy import (
     text,
 )
 
-from ml_template.data import schema
-from ml_template.paths import DATA_RAW, LOGS
+from ml_template.data.schema import Role, Status
+from ml_template.db.connection import get_engine
+from ml_template.paths import ARTIFACTS, LOGS
 from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger(__name__)
 
-
-def file_sha256(path, chunk_size: int = 1 << 20) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        while chunk := f.read(chunk_size):
-            h.update(chunk)
-    return h.hexdigest()
+# Map proposed string types to SQLAlchemy column types
+TYPE_MAP = {
+    "Int8": Integer,
+    "int8": Integer,
+    "Int64": Integer,
+    "int64": Integer,
+    "float64": Float,
+    "float32": Float,
+    "str": String,
+    "object": String,
+    "bool": Boolean,
+}
 
 
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    """Return the SHA-256 digest of a file without parsing or loading it all."""
+    """Return the SHA-256 digest of a file without loading it all into memory."""
     hasher = hashlib.sha256()
-
     with path.open("rb") as source:
         while chunk := source.read(chunk_size):
             hasher.update(chunk)
-
     return hasher.hexdigest()
 
 
 def git_sha() -> str:
+    """Return the current Git commit hash or 'unknown'."""
     try:
         return subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -67,201 +73,278 @@ def git_sha() -> str:
         return "unknown"
 
 
-def setup_db(engine: Engine) -> None:
+def setup_db(engine: Engine, inspection_report: dict) -> None:
+    """Create bronze tables if they do not already exist."""
     metadata = MetaData()
-    Table(
-        "sensor_readings",
-        metadata,
-        Column(schema.KEY_COL, Integer, primary_key=True),
-        *[Column(f"{schema.SENSOR_PREFIX}{i:03d}", Float) for i in range(1, schema.N_SENSORS + 1)],
-    )
-    Table(
-        "wafer_labels",
-        metadata,
-        Column(schema.KEY_COL, Integer, primary_key=True),
-        Column(schema.TARGET_COL, Integer),
-        Column(schema.TIME_COL, DateTime),
-    )
+    proposed_dtypes = inspection_report.get("proposed_canonical_schema", {}).get("dtypes", {})
+
+    # 1. Dynamically construct raw_records columns
+    raw_columns = [
+        Column("dataset_version_id", String, primary_key=True),
+        Column("source_row_number", Integer, primary_key=True),
+    ]
+
+    for col_name, dtype_str in proposed_dtypes.items():
+        sql_type = TYPE_MAP.get(dtype_str, String)
+        raw_columns.append(Column(col_name, sql_type))
+
+    Table("raw_records", metadata, *raw_columns)
+
+    # 2. Column registry
     Table(
         "column_registry",
         metadata,
+        Column("dataset_version_id", String, primary_key=True),
         Column("column_name", String, primary_key=True),
-        Column("role", String),
-        Column("status", String),
-        Column("col_index", Integer),
-        Column("missing_pct", Float),
-        Column("derived_from", String),
-        Column("notes", String),
+        Column("canonical_column_name", String),
+        Column("source_position", Integer),
+        Column("observed_parse_dtype", String),
+        Column("proposed_storage_dtype", String),
+        Column("semantic_role", String),
+        Column("is_required", Boolean),
+        Column("is_nullable", Boolean),
+        Column("description", String),
+        Column("created_at", DateTime),
     )
+
+    # 3. Ingestion log
     Table(
         "ingestion_log",
         metadata,
-        Column("ingest_id", Integer, primary_key=True),
-        Column("load_ts", DateTime),
-        Column("source_file", String),
+        Column("ingest_id", Integer, primary_key=True, autoincrement=True),
+        Column("dataset_version_id", String, unique=True),
+        Column("source_name", String),
+        Column("source_path_or_uri", String),
         Column("source_sha256", String),
-        Column("table_name", String),
-        Column("rows_inserted", Integer),
+        Column("inspection_report_path", String),
+        Column("inspection_report_sha256", String),
+        Column("row_count_read", Integer),
+        Column("row_count_written", Integer),
+        Column("columns_count", Integer),
+        Column("encoding", String),
+        Column("delimiter", String),
+        Column("started_at", DateTime),
+        Column("completed_at", DateTime),
+        Column("status", String),
+        Column("error_message", String),
         Column("git_sha", String),
     )
+
     metadata.create_all(engine)
 
 
-def load_data(data_config):
-    """Load raw files. Errors propagate — a failed load must die loudly."""
-    try:
-        source_path = Path(data_config["data"]["source"])
-        data_hash = sha256_file(source_path)
+def load_data(data_config: dict) -> tuple[pd.DataFrame, dict, Path, str]:
+    """Load raw CSV and corresponding inspection report. Errors propagate loudly."""
+    source_path = Path(data_config["data"]["source"])
+    if not source_path.is_file():
+        raise FileNotFoundError(f"Source file not found: {source_path}")
 
-    except Exception as e:
-        print(f'Something went wrong getting data sha: {e}')
+    data_hash = sha256_file(source_path)
+    data_name = data_config["data"].get("adapter", source_path.stem)
+    inspection_report_name = f"{data_name}__sha256-{data_hash[:12]}.json"
+    report_path = ARTIFACTS / "inspection" / inspection_report_name
 
-    data_name = data_config['data']['adapter']
-    inspection_report_name = f'{data_name}__sha256-{data_hash[:12]}.json'
-    report_path = (Path(f'artifacts/inspection/{inspection_report_name}'))
-
-    try:
-        with report_path.open("r", encoding="utf-8") as file:
-            inspection_report = json.load(file)
-    except Exception as e:
-        print(f'Something went wrong while reading the inspection report. {e}')
-
-    encoding = inspection_report['source']['encoding']
-    delimiter = inspection_report['source']['delimiter']
-    source_path = Path(inspection_report['source']['source_path'])
-
-    try:
-        dfX = pd.read_csv(
-            source_path,
-            sep=delimiter,
-            encoding=encoding,
-            na_values=["NaN"],
+    if not report_path.is_file():
+        raise FileNotFoundError(
+            f"Inspection report not found at {report_path}. Run source inspection first."
         )
-    except Exception as e:
-        print(f'Something went wrong while loading data. {e}')
 
-    assert dfX.shape[0] == data_config["bronze_source_contract"]["rows"]
-    assert dfX.shape[1] == data_config["bronze_source_contract"]["columns"]
-    assert set(dfX.columns.to_list()) == set(data_config['bronze_source_contract']['col_names'])
+    with report_path.open("r", encoding="utf-8") as file:
+        inspection_report = json.load(file)
 
-    return dfX
+    report_hash = sha256_file(report_path)
+    encoding = inspection_report["source"]["encoding"]
+    delimiter = inspection_report["source"]["delimiter"]
+
+    dfX = pd.read_csv(
+        source_path,
+        sep=delimiter,
+        encoding=encoding,
+        na_values=["NaN"],
+    )
+
+    # Contract validation checks
+    contract = data_config.get("bronze_source_contract", {})
+    if "rows" in contract:
+        assert len(dfX) == contract["rows"], (
+            f"Row count mismatch: expected {contract['rows']}, got {len(dfX)}"
+        )
+    if "columns" in contract:
+        assert dfX.shape[1] == contract["columns"], (
+            f"Column count mismatch: expected {contract['columns']}, got {dfX.shape[1]}"
+        )
+    if "col_names" in contract:
+        expected_cols = set(contract["col_names"])
+        actual_cols = set(dfX.columns)
+        assert actual_cols == expected_cols, (
+            f"Header mismatch. Missing: {expected_cols - actual_cols}, Extra: {actual_cols - expected_cols}"
+        )
+
+    return dfX, inspection_report, report_path, report_hash
 
 
-def build_registry(dfX: pd.DataFrame) -> pd.DataFrame:
-    """Register raw columns. Status changes and engineered columns are
-    registered later by the modules that create them."""
-    sensors = [c for c in dfX.columns if c != schema.KEY_COL]
-    rows = [
-        {
-            "column_name": schema.KEY_COL,
-            "role": schema.Role.KEY.value,
-            "status": schema.Status.ACTIVE.value,
-            "col_index": 0,
-            "missing_pct": 0.0,
-            "derived_from": None,
-            "notes": "row order in raw file is chronological",
-        },
-        {
-            "column_name": schema.TARGET_COL,
-            "role": schema.Role.TARGET.value,
-            "status": schema.Status.ACTIVE.value,
-            "col_index": None,
-            "missing_pct": 0.0,
-            "derived_from": None,
-            "notes": "raw -1/1; encode downstream",
-        },
-        {
-            "column_name": schema.TIME_COL,
-            "role": schema.Role.METADATA.value,
-            "status": schema.Status.ACTIVE.value,
-            "col_index": None,
-            "missing_pct": 0.0,
-            "derived_from": None,
-            "notes": None,
-        },
-    ]
-    miss = dfX[sensors].isna().mean()
-    rows += [
-        {
-            "column_name": s,
-            "role": schema.Role.FEATURE_RAW.value,
-            "status": schema.Status.ACTIVE.value,
-            "col_index": int(s[1:]),
-            "missing_pct": float(miss[s]),
-            "derived_from": None,
-            "notes": None,
+def build_registry(
+    df: pd.DataFrame,
+    inspection_report: dict,
+    dataset_version_id: str,
+    contract: dict | None = None,
+) -> pd.DataFrame:
+    """Register raw columns and their metadata for tracking and lineage."""
+    contract = contract or {}
+    observed = inspection_report.get("observed_schema", {})
+    observed_dtypes = observed.get("pandas_inferred_dtypes", {})
+    null_counts = observed.get("null_counts", {})
+
+    proposed = inspection_report.get("proposed_canonical_schema", {})
+    proposed_dtypes = proposed.get("dtypes", {})
+
+    semantic_roles = contract.get("semantic_roles", {})
+    canonical_names = contract.get("canonical_names", {})
+    required_cols = set(contract.get("required_columns", df.columns.tolist()))
+    descriptions = contract.get("column_descriptions", {})
+
+    now_utc = datetime.now(timezone.utc)
+    rows = []
+
+    for idx, col in enumerate(df.columns):
+        is_nullable = null_counts.get(col, 0) > 0
+        role_val = semantic_roles.get(col, Role.UNKNOWN.value)
+        if isinstance(role_val, Role):
+            role_val = role_val.value
+
+        row = {
+            "dataset_version_id": dataset_version_id,
+            "column_name": col,
+            "canonical_column_name": canonical_names.get(col, col.lower().replace(" ", "_")),
+            "source_position": idx,
+            "observed_parse_dtype": observed_dtypes.get(col, str(df[col].dtype)),
+            "proposed_storage_dtype": proposed_dtypes.get(col, "str"),
+            "semantic_role": role_val,
+            "is_required": col in required_cols,
+            "is_nullable": is_nullable,
+            "description": descriptions.get(col, None),
+            "created_at": now_utc,
         }
-        for s in sensors
-    ]
+        rows.append(row)
+
     return pd.DataFrame(rows)
 
 
-def insert_data(dfX, dfy, registry, engine: Engine, data_dir=DATA_RAW) -> None:
-    log = pd.DataFrame(
-        [
-            {
-                "load_ts": datetime.now(UTC),
-                "source_file": "secom.data",
-                "source_sha256": file_sha256(data_dir / "secom.data"),
-                "table_name": "sensor_readings",
-                "rows_inserted": len(dfX),
-                "git_sha": git_sha(),
-            },
-            {
-                "load_ts": datetime.now(UTC),
-                "source_file": "secom_labels.data",
-                "source_sha256": file_sha256(data_dir / "secom_labels.data"),
-                "table_name": "wafer_labels",
-                "rows_inserted": len(dfy),
-                "git_sha": git_sha(),
-            },
-        ]
-    )
-    with engine.begin() as conn:  # one transaction: all-or-nothing
-        for table in ("sensor_readings", "wafer_labels", "column_registry"):
-            conn.execute(text(f"DELETE FROM {table}"))
-        dfX.to_sql("sensor_readings", conn, if_exists="append", index=False)
-        dfy.to_sql("wafer_labels", conn, if_exists="append", index=False)
+def insert_data(
+    dfX: pd.DataFrame,
+    registry: pd.DataFrame,
+    engine: Engine,
+    data_config: dict,
+    inspection_report: dict,
+    report_path: Path,
+    report_hash: str,
+    dataset_version_id: str,
+    started_at: datetime,
+) -> None:
+    """Attach lineage attributes and insert data, registry, and log atomically."""
+    # 1. Prepare raw_records by adding lineage columns
+    df_to_insert = dfX.copy()
+    df_to_insert.insert(0, "source_row_number", range(1, len(df_to_insert) + 1))
+    df_to_insert.insert(0, "dataset_version_id", dataset_version_id)
+
+    # 2. Build single-row ingestion log dataframe
+    completed_at = datetime.now(timezone.utc)
+    source_path_val = str(data_config["data"]["source"])
+    source_name_val = Path(source_path_val).name
+
+    log_entry = {
+        "dataset_version_id": dataset_version_id,
+        "source_name": source_name_val,
+        "source_path_or_uri": source_path_val,
+        "source_sha256": inspection_report["source"]["source_sha256"],
+        "inspection_report_path": str(report_path),
+        "inspection_report_sha256": report_hash,
+        "row_count_read": len(dfX),
+        "row_count_written": len(df_to_insert),
+        "columns_count": dfX.shape[1],
+        "encoding": inspection_report["source"]["encoding"],
+        "delimiter": inspection_report["source"]["delimiter"],
+        "started_at": started_at,
+        "completed_at": completed_at,
+        "status": Status.SUCCEEDED.value,
+        "error_message": None,
+        "git_sha": git_sha(),
+    }
+    log_df = pd.DataFrame([log_entry])
+
+    # 3. Transactional atomic write (delete existing records for THIS version if re-running)
+    with engine.begin() as conn:
+        for tbl in ("raw_records", "column_registry", "ingestion_log"):
+            conn.execute(
+                text(f"DELETE FROM {tbl} WHERE dataset_version_id = :dvid"),
+                {"dvid": dataset_version_id},
+            )
+
+        df_to_insert.to_sql("raw_records", conn, if_exists="append", index=False)
         registry.to_sql("column_registry", conn, if_exists="append", index=False)
-        log.to_sql("ingestion_log", conn, if_exists="append", index=False)
+        log_df.to_sql("ingestion_log", conn, if_exists="append", index=False)
+
     logger.info(
-        "ingested %d readings, %d labels, %d registry rows",
-        len(dfX),
-        len(dfy),
-        len(registry),
+        "Successfully ingested %d rows, %d columns into raw_records (version: %s)",
+        len(df_to_insert),
+        dfX.shape[1],
+        dataset_version_id,
     )
 
 
 def parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Load input data contract")
+    p = argparse.ArgumentParser(description="Ingest raw data into bronze SQLite database")
     p.add_argument(
         "--data_config",
         type=str,
-        default=None,
-        help="name of config file for data to be ingested",
+        required=True,
+        help="Path to YAML config file for data to be ingested",
+    )
+    p.add_argument(
+        "--dataset_version_id",
+        type=str,
+        default="ds_v1",
+        help="Identifier for this dataset version (default: ds_v1)",
     )
     return p.parse_args(argv)
 
 
 def main(argv=None) -> None:
-
     args = parse_args(argv)
+    setup_logging(logfile=LOGS / "db_ingest.log")
+    logger.info("[db_ingest] Started ingestion")
 
-    global logger
-    logger = setup_logging(logfile=LOGS / "db_ingest.log")
-    logger.info("[db_ingest] start")
-
-    #engine = get_engine()
-    #setup_db(engine)
+    started_at = datetime.now(timezone.utc)
 
     conf_path = Path(args.data_config)
     with conf_path.open("r", encoding="utf-8") as file:
         data_config = yaml.safe_load(file)
-    _ = load_data(data_config=data_config)
 
-    # registry = build_registry(dfX)
-    # insert_data(dfX, dfy, registry, engine)
-    logger.info("[db_ingest] done")
+    dfX, inspection_report, report_path, report_hash = load_data(data_config=data_config)
+
+    engine = get_engine()
+    setup_db(engine, inspection_report)
+
+    contract = data_config.get("semantic_metadata", {})
+    registry = build_registry(
+        df=dfX,
+        inspection_report=inspection_report,
+        dataset_version_id=args.dataset_version_id,
+        contract=contract,
+    )
+
+    insert_data(
+        dfX=dfX,
+        registry=registry,
+        engine=engine,
+        data_config=data_config,
+        inspection_report=inspection_report,
+        report_path=report_path,
+        report_hash=report_hash,
+        dataset_version_id=args.dataset_version_id,
+        started_at=started_at,
+    )
+    logger.info("[db_ingest] Completed successfully")
 
 
 if __name__ == "__main__":

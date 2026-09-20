@@ -1,3 +1,4 @@
+# Bronze contract
 project:
   name: ai4i-predictive-maintenance
   description: Binary machine-failure prediction using the AI4I 2020 dataset
