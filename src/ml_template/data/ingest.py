@@ -8,297 +8,247 @@ in ingestion_log.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import logging
-import subprocess
+import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
 from sqlalchemy import (
-    Boolean,
-    Column,
-    DateTime,
     Engine,
-    Float,
-    Integer,
-    MetaData,
-    String,
-    Table,
     text,
 )
 
-from ml_template.data.schema import Role, Status
+from ml_template.data.inspect import (
+    SourceStructuralSchema,
+    inspect_source_schema,
+    iter_batches,
+    validate_bronze_contract,
+)
+from ml_template.data.schema import Status
 from ml_template.db.connection import get_engine
-from ml_template.paths import ARTIFACTS
-from ml_template.tracking.utils import setup_logging
+from ml_template.db.tables import setup_db
+from ml_template.tracking.utils import git_sha, setup_logging
 
 logger = logging.getLogger("ml_template.data.ingest")
 
-# Map proposed string types to SQLAlchemy column types
-TYPE_MAP = {
-    "Int8": Integer,
-    "int8": Integer,
-    "Int64": Integer,
-    "int64": Integer,
-    "float64": Float,
-    "float32": Float,
-    "str": String,
-    "object": String,
-    "bool": Boolean,
-}
 
-
-def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
-    """Return the SHA-256 digest of a file without loading it all into memory."""
-    hasher = hashlib.sha256()
-    with path.open("rb") as source:
-        while chunk := source.read(chunk_size):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
-def git_sha() -> str:
-    """Return the current Git commit hash or 'unknown'."""
-    try:
-        return subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except Exception:
-        return "unknown"
-
-
-def setup_db(engine: Engine, inspection_report: dict) -> None:
-    """Create bronze tables if they do not already exist."""
-    metadata = MetaData()
-    proposed_dtypes = inspection_report.get("proposed_canonical_schema", {}).get("dtypes", {})
-
-    # 1. Dynamically construct raw_records columns
-    raw_columns = [
-        Column("dataset_version_id", String, primary_key=True),
-        Column("source_row_number", Integer, primary_key=True),
-    ]
-
-    for col_name, dtype_str in proposed_dtypes.items():
-        sql_type = TYPE_MAP.get(dtype_str, String)
-        raw_columns.append(Column(col_name, sql_type))
-
-    Table("raw_records", metadata, *raw_columns)
-
-    # 2. Column registry
-    Table(
-        "column_registry",
-        metadata,
-        Column("dataset_version_id", String, primary_key=True),
-        Column("column_name", String, primary_key=True),
-        Column("canonical_column_name", String),
-        Column("source_position", Integer),
-        Column("observed_parse_dtype", String),
-        Column("proposed_storage_dtype", String),
-        Column("semantic_role", String),
-        Column("is_required", Boolean),
-        Column("is_nullable", Boolean),
-        Column("description", String),
-        Column("created_at", DateTime),
-    )
-
-    # 3. Ingestion log
-    Table(
-        "ingestion_log",
-        metadata,
-        Column("ingest_id", Integer, primary_key=True, autoincrement=True),
-        Column("dataset_version_id", String, unique=True),
-        Column("source_name", String),
-        Column("source_path_or_uri", String),
-        Column("source_sha256", String),
-        Column("inspection_report_path", String),
-        Column("inspection_report_sha256", String),
-        Column("row_count_read", Integer),
-        Column("row_count_written", Integer),
-        Column("columns_count", Integer),
-        Column("encoding", String),
-        Column("delimiter", String),
-        Column("started_at", DateTime),
-        Column("completed_at", DateTime),
-        Column("status", String),
-        Column("error_message", String),
-        Column("git_sha", String),
-    )
-
-    metadata.create_all(engine)
-
-
-def load_data(data_config: dict) -> tuple[pd.DataFrame, dict, Path, str]:
-    """Load raw CSV and corresponding inspection report. Errors propagate loudly."""
-    source_path = Path(data_config["data"]["source"])
-    if not source_path.is_file():
-        raise FileNotFoundError(f"Source file not found: {source_path}")
-
-    data_hash = sha256_file(source_path)
-    data_name = data_config["data"].get("adapter", source_path.stem)
-    inspection_report_name = f"{data_name}__sha256-{data_hash[:12]}.json"
-    report_path = ARTIFACTS / "inspection" / inspection_report_name
-
-    if not report_path.is_file():
-        raise FileNotFoundError(
-            f"Inspection report not found at {report_path}. Run source inspection first."
-        )
-
-    with report_path.open("r", encoding="utf-8") as file:
-        inspection_report = json.load(file)
-
-    report_hash = sha256_file(report_path)
-    encoding = inspection_report["source"]["encoding"]
-    delimiter = inspection_report["source"]["delimiter"]
-
-    dfX = pd.read_csv(
-        source_path,
-        sep=delimiter,
-        encoding=encoding,
-        na_values=["NaN"],
-    )
-
-    # Contract validation checks
-    contract = data_config.get("bronze_source_contract", {})
-    if "rows" in contract:
-        assert len(dfX) == contract["rows"], (
-            f"Row count mismatch: expected {contract['rows']}, got {len(dfX)}"
-        )
-    if "columns" in contract:
-        assert dfX.shape[1] == contract["columns"], (
-            f"Column count mismatch: expected {contract['columns']}, got {dfX.shape[1]}"
-        )
-    if "col_names" in contract:
-        expected_cols = set(contract["col_names"])
-        actual_cols = set(dfX.columns)
-        assert actual_cols == expected_cols, (
-            f"Header mismatch. Missing: {expected_cols - actual_cols}, Extra: {actual_cols - expected_cols}"
-        )
-
-    return dfX, inspection_report, report_path, report_hash
+def _to_canonical_name(raw_name: str) -> str:
+    """Sanitize a raw column header into a canonical snake_case identifier."""
+    # Remove brackets, parentheses, and special punctuation
+    clean = re.sub(r"[\[\]\(\)\{\}\<\>]", "", raw_name)
+    # Replace spaces, hyphens, and non-alphanumeric chars with underscores
+    clean = re.sub(r"[\s\-\.]+", "_", clean.strip().lower())
+    # Strip any consecutive or trailing underscores
+    return re.sub(r"_+", "_", clean).strip("_")
 
 
 def build_registry(
-    df: pd.DataFrame,
-    inspection_report: dict,
+    schema: SourceStructuralSchema,
     dataset_version_id: str,
-    contract: dict | None = None,
+    contract: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
-    """Register raw columns and their metadata for tracking and lineage."""
-    contract = contract or {}
-    observed = inspection_report.get("observed_schema", {})
-    observed_dtypes = observed.get("pandas_inferred_dtypes", {})
-    null_counts = observed.get("null_counts", {})
+    """Construct column_registry entries for a dataset version.
 
-    proposed = inspection_report.get("proposed_canonical_schema", {})
-    proposed_dtypes = proposed.get("dtypes", {})
+    Supports semantic grouping lists (id, features, target, outcomes) directly
+    from the bronze_source_contract.
+    """
+    contract_data = contract or {}
+    canonical_overrides = contract_data.get("canonical_names", {})
+    descriptions = contract_data.get("column_descriptions", {})
+    required_cols = set(
+        contract_data.get("required_columns", contract_data.get("col_names", schema.columns))
+    )
 
-    semantic_roles = contract.get("semantic_roles", {})
-    canonical_names = contract.get("canonical_names", {})
-    required_cols = set(contract.get("required_columns", df.columns.tolist()))
-    descriptions = contract.get("column_descriptions", {})
+    # 1. Resolve semantic roles from contract lists
+    # Supports both grouped `roles: {id: [...], feature: [...]}`
+    # and direct lists `id: [...]`, `features: [...]`, `target: [...]`, `outcomes: [...]`
+    column_role_map: dict[str, str] = {}
+
+    roles_dict = contract_data.get("roles", {})
+    if roles_dict:
+        for role_name, col_list in roles_dict.items():
+            for col in col_list:
+                column_role_map[col] = role_name.lower().rstrip(
+                    "s"
+                )  # e.g., 'features' -> 'feature'
+
+    # Fallback to direct contract keys if not under `roles:`
+    role_key_mapping = {
+        "id": "id",
+        "features": "feature",
+        "feature": "feature",
+        "target": "target",
+        "outcomes": "outcome",
+        "outcome": "outcome",
+    }
+    for key, role_label in role_key_mapping.items():
+        if key in contract_data and isinstance(contract_data[key], list):
+            for col in contract_data[key]:
+                # Do not overwrite if already explicitly mapped
+                if col not in column_role_map or role_label == "target":
+                    column_role_map[col] = role_label
 
     now_utc = datetime.now(UTC)
-    rows = []
+    records: list[dict[str, Any]] = []
 
-    for idx, col in enumerate(df.columns):
-        is_nullable = null_counts.get(col, 0) > 0
-        role_val = semantic_roles.get(col, Role.UNKNOWN.value)
-        if isinstance(role_val, Role):
-            role_val = role_val.value
+    for idx, col in enumerate(schema.columns):
+        # Determine semantic role
+        role = column_role_map.get(col, "unknown")
 
-        row = {
-            "dataset_version_id": dataset_version_id,
-            "column_name": col,
-            "canonical_column_name": canonical_names.get(col, col.lower().replace(" ", "_")),
-            "source_position": idx,
-            "observed_parse_dtype": observed_dtypes.get(col, str(df[col].dtype)),
-            "proposed_storage_dtype": proposed_dtypes.get(col, "str"),
-            "semantic_role": role_val,
-            "is_required": col in required_cols,
-            "is_nullable": is_nullable,
-            "description": descriptions.get(col, None),
-            "created_at": now_utc,
-        }
-        rows.append(row)
+        # Determine canonical name
+        canonical_name = canonical_overrides.get(col, _to_canonical_name(col))
 
-    return pd.DataFrame(rows)
+        records.append(
+            {
+                "dataset_version_id": dataset_version_id,
+                "column_name": col,
+                "canonical_column_name": canonical_name,
+                "source_position": idx,
+                "source_dtype": schema.column_types.get(col, "string"),
+                "semantic_role": role,
+                "is_required": col in required_cols,
+                "description": descriptions.get(col, None),
+                "created_at": now_utc,
+            }
+        )
+
+    return pd.DataFrame(records)
 
 
-def insert_data(
-    dfX: pd.DataFrame,
-    registry: pd.DataFrame,
+def insert_batches(
     engine: Engine,
-    data_config: dict,
-    inspection_report: dict,
-    report_path: Path,
-    report_hash: str,
+    schema: SourceStructuralSchema,
+    registry: pd.DataFrame,
     dataset_version_id: str,
+    git_sha: str,
     started_at: datetime,
-) -> None:
-    """Attach lineage attributes and insert data, registry, and log atomically."""
-    # 1. Prepare raw_records by adding lineage columns
-    df_to_insert = dfX.copy()
-    df_to_insert.insert(0, "source_row_number", range(1, len(df_to_insert) + 1))
-    df_to_insert.insert(0, "dataset_version_id", dataset_version_id)
+    batch_size: int = 50_000,
+) -> int:
+    """Stream raw batches into SQLite and record lineage and audit records.
 
-    # 2. Build single-row ingestion log dataframe
-    completed_at = datetime.now(UTC)
-    source_path_val = str(data_config["data"]["source"])
-    source_name_val = Path(source_path_val).name
+    Parameters
+    ----------
+    engine : Engine
+        SQLAlchemy database engine.
+    schema : SourceStructuralSchema
+        Discovered technical schema of the source file (contains source_sha256).
+    registry : pd.DataFrame
+        Prepared column_registry DataFrame from build_registry.
+    dataset_version_id : str
+        Unique identifier for this dataset version snapshot.
+    git_sha : str
+        Git commit SHA of the current working tree.
+    started_at : datetime
+        UTC timestamp marking when ingestion began.
+    batch_size : int, optional
+        Target chunk row count (default 50,000).
 
-    log_entry = {
-        "dataset_version_id": dataset_version_id,
-        "source_name": source_name_val,
-        "source_path_or_uri": source_path_val,
-        "source_sha256": inspection_report["source"]["source_sha256"],
-        "inspection_report_path": str(report_path),
-        "inspection_report_sha256": report_hash,
-        "row_count_read": len(dfX),
-        "row_count_written": len(df_to_insert),
-        "columns_count": dfX.shape[1],
-        "encoding": inspection_report["source"]["encoding"],
-        "delimiter": inspection_report["source"]["delimiter"],
-        "started_at": started_at,
-        "completed_at": completed_at,
-        "status": Status.SUCCEEDED.value,
-        "error_message": None,
-        "git_sha": git_sha(),
-    }
-    log_df = pd.DataFrame([log_entry])
+    Returns
+    -------
+    int
+        Total number of rows ingested into raw_records.
+    """
+    total_rows = 0
+    source_row_offset = 0
 
-    # 3. Transactional atomic write (delete existing records for THIS version if re-running)
+    # Execute inside a single transactional block for atomicity.
+    # If an exception occurs, the entire transaction rolls back.
     with engine.begin() as conn:
-        for tbl in ("raw_records", "column_registry", "ingestion_log"):
+        # 1. Idempotency safeguard: purge existing records for THIS version if re-running
+        for table_name in ("raw_records", "column_registry", "ingestion_log"):
             conn.execute(
-                text(f"DELETE FROM {tbl} WHERE dataset_version_id = :dvid"),
+                text(f"DELETE FROM {table_name} WHERE dataset_version_id = :dvid"),
                 {"dvid": dataset_version_id},
             )
 
-        df_to_insert.to_sql("raw_records", conn, if_exists="append", index=False)
-        registry.to_sql("column_registry", conn, if_exists="append", index=False)
-        log_df.to_sql("ingestion_log", conn, if_exists="append", index=False)
+        # 2. Stream chunks and write directly to raw_records
+        logger.info(
+            "Streaming batches from %s into raw_records (version: %s)...",
+            schema.source_path.name,
+            dataset_version_id,
+        )
+
+        for batch_df in iter_batches(schema=schema, batch_size=batch_size):
+            num_rows = len(batch_df)
+            if num_rows == 0:
+                continue
+
+            # Assign lineage attributes
+            row_numbers = range(source_row_offset + 1, source_row_offset + num_rows + 1)
+            batch_df.insert(0, "source_row_number", row_numbers)
+            batch_df.insert(0, "dataset_version_id", dataset_version_id)
+
+            # Insert batch into raw_records
+            batch_df.to_sql(
+                "raw_records",
+                conn,
+                if_exists="append",
+                index=False,
+                chunksize=2_000,
+            )
+
+            source_row_offset += num_rows
+            total_rows += num_rows
+
+        # 3. Insert prepared column_registry
+        registry.to_sql(
+            "column_registry",
+            conn,
+            if_exists="append",
+            index=False,
+        )
+
+        # 4. Construct and insert single ingestion_log record
+        completed_at = datetime.now(UTC)
+        source_path_val = str(schema.source_path)
+        source_name_val = schema.source_path.name
+
+        log_entry = {
+            "dataset_version_id": dataset_version_id,
+            "source_name": source_name_val,
+            "source_format": schema.format,
+            "source_path_or_uri": source_path_val,
+            "source_sha256": schema.source_sha256,
+            "schema_hash": schema.schema_hash,
+            "row_count_read": total_rows,
+            "row_count_written": total_rows,
+            "columns_count": len(schema.columns),
+            "encoding": schema.encoding,
+            "delimiter": schema.delimiter,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "status": Status.SUCCEEDED.value,
+            "error_message": None,
+            "git_sha": git_sha,
+        }
+
+        log_df = pd.DataFrame([log_entry])
+        log_df.to_sql(
+            "ingestion_log",
+            conn,
+            if_exists="append",
+            index=False,
+        )
 
     logger.info(
-        "Successfully ingested %d rows, %d columns into raw_records (version: %s)",
-        len(df_to_insert),
-        dfX.shape[1],
+        "Successfully ingested %d rows, %d columns into bronze raw_records (version: %s)",
+        total_rows,
+        len(schema.columns),
         dataset_version_id,
     )
+    return total_rows
 
 
 def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Ingest raw data into bronze SQLite database")
     p.add_argument(
-        "--data_config",
+        "--data_file",
         type=str,
         required=True,
-        help="Path to YAML config file for data to be ingested",
+        help="Path to data to be ingested",
     )
     p.add_argument(
         "--dataset_version_id",
@@ -313,39 +263,43 @@ def main(argv=None) -> None:
     args = parse_args(argv)
     # Sets up console + logs/app/pipeline.log
     setup_logging()
-    logger.info("[ingest] Started raw data ingestion")
+    logger.info("Started raw data ingestion")
 
+    # 1. Capture execution metadata
     started_at = datetime.now(UTC)
+    current_git_sha = git_sha()
+    dataset_version_id = args.dataset_version_id
 
-    conf_path = Path(args.data_config)
+    # 2. Load configurations
+    conf_path = Path(args.data_file)
     with conf_path.open("r", encoding="utf-8") as file:
         data_config = yaml.safe_load(file)
 
-    dfX, inspection_report, report_path, report_hash = load_data(data_config=data_config)
+    source_path = Path(data_config["data"]["source"])
+    source_format = data_config["data"].get("format")
 
+    # 3. Discover schema and comput source_sha256
+    schema = inspect_source_schema(source_path, source_format)
+
+    # 4. Enforce structural bronze contract
+    contract = data_config.get("bronze_source_contract", {})
+    validate_bronze_contract(schema, contract)
+
+    # 5. Initialize database tables dynamically
     engine = get_engine()
-    setup_db(engine, inspection_report)
+    setup_db(engine, schema)
 
-    contract = data_config.get("semantic_metadata", {})
+    # 6. Build column registry metadata
     registry = build_registry(
-        df=dfX,
-        inspection_report=inspection_report,
-        dataset_version_id=args.dataset_version_id,
-        contract=contract,
+        schema,
+        dataset_version_id,
+        contract,
     )
 
-    insert_data(
-        dfX=dfX,
-        registry=registry,
-        engine=engine,
-        data_config=data_config,
-        inspection_report=inspection_report,
-        report_path=report_path,
-        report_hash=report_hash,
-        dataset_version_id=args.dataset_version_id,
-        started_at=started_at,
-    )
-    logger.info("[db_ingest] Completed successfully")
+    # 7 Stream batches and write to DB atomatically
+    insert_batches(engine, schema, registry, dataset_version_id, current_git_sha, started_at)
+
+    logger.info("Completed successfully")
 
 
 if __name__ == "__main__":

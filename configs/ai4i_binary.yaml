@@ -1,4 +1,4 @@
-# Bronze contract
+# Bronze dataset configuration and contract
 project:
   name: ai4i-predictive-maintenance
   description: Binary machine-failure prediction using the AI4I 2020 dataset
@@ -19,27 +19,58 @@ data:
   task: binary_classification
   positive_label: 1
 
+# Minimal technical & structural contract for Bronze ingestion
 bronze_source_contract:
-  rows:  10000
+  rows: 10000
   columns: 14
-  col_names: [UDI, Product ID, Type, "Air temperature [K]", "Process temperature [K]","Rotational speed [rpm]","Torque [Nm]","Tool wear [min]",Machine failure,TWF,HDF,PWF,OSF,RNF]
-  features: [Type,"Air temperature [K]", "Process temperature [K]","Rotational speed [rpm]","Torque [Nm]","Tool wear [min]"]
-  id: [UDI,Product ID]
-  target: [Machine failure]
-  outcomes: [Machine failure,TWF,HDF,PWF,OSF,RNF]
-  Missing value: No
+  col_names:
+    - UDI
+    - Product ID
+    - Type
+    - "Air temperature [K]"
+    - "Process temperature [K]"
+    - "Rotational speed [rpm]"
+    - "Torque [Nm]"
+    - "Tool wear [min]"
+    - Machine failure
+    - TWF
+    - HDF
+    - PWF
+    - OSF
+    - RNF
 
+  # Semantic column role classification for column_registry
+  roles:
+    id:
+      - UDI
+      - Product ID
+    feature:
+      - Type
+      - "Air temperature [K]"
+      - "Process temperature [K]"
+      - "Rotational speed [rpm]"
+      - "Torque [Nm]"
+      - "Tool wear [min]"
+    target:
+      - Machine failure
+    outcome:
+      - TWF
+      - HDF
+      - PWF
+      - OSF
+      - RNF
 
+# Business-level validation (enforced downstream in Silver / EDA)
 validation:
   required_columns:
     - UDI
     - Product ID
     - Type
-    - Air temperature [K]
-    - Process temperature [K]
-    - Rotational speed [rpm]
-    - Torque [Nm]
-    - Tool wear [min]
+    - "Air temperature [K]"
+    - "Process temperature [K]"
+    - "Rotational speed [rpm]"
+    - "Torque [Nm]"
+    - "Tool wear [min]"
     - Machine failure
   allowed_target_values: [0, 1]
   require_unique_entity_id: true

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ml_template.paths import ROOT
 
 # -- DATA FACTS ---
-DATA_NAME = 'ai4i2020.csv'
+DATA_NAME = "ai4i2020.csv"
 
 
 # --- Data decisions (frozen after EDA; see validation.md) ---

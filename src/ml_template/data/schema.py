@@ -1,5 +1,4 @@
-"""Schema facts — structural constants the pipeline assumes.
-"""
+"""Schema facts — structural constants the pipeline assumes."""
 
 import enum
 
@@ -14,4 +13,4 @@ class Role(enum.StrEnum):
 class Status(enum.StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
-    FAILED = 'failed'
+    FAILED = "failed"
