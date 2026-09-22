@@ -32,7 +32,6 @@ from ml_template.db.connection import get_engine
 from ml_template.db.tables import setup_db
 from ml_template.tracking.utils import git_sha, setup_logging
 
-logger = logging.getLogger("ml_template.data.ingest")
 
 
 def _to_canonical_name(raw_name: str) -> str:
