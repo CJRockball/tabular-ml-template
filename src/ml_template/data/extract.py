@@ -1,83 +1,91 @@
-"""Extract the wide frame via SQL.
+"""Extraction functions for bronze data."""
 
-Always the full frame; the split label comes from config.CUTOFF
-(None pre-EDA -> every row 'unassigned'). Thin by design: no cleaning,
-no label encoding, no feature work — those live downstream.
-"""
+from __future__ import annotations
 
 import logging
+from typing import Literal
 
 import pandas as pd
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 
-from ml_template.config import CUTOFF, EXCLUDE_AFTER
-from ml_template.data import schema
-from ml_template.db.connection import get_engine, register_columns, run_query
-from ml_template.paths import LOGS
-from ml_template.tracking.utils import setup_logging
+from ml_template.db.connection import get_engine
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("ml_template.data.extract")
 
 
-def extract(
-    engine: Engine,
-    start: str = "1970-01-01",
-    end: str = "2100-01-01",
-    cutoff=CUTOFF,
-    exclude_after=EXCLUDE_AFTER,
+def extract_bronze(
+    dataset_version_id: str,
+    columns: list[str] | None = None,
+    sample_n: int | None = None,
+    sampling: Literal["contiguous", "random", "all"] = "contiguous",
+    engine: Engine | None = None,
 ) -> pd.DataFrame:
+    """Extract records for a specific dataset version from the bronze layer.
 
-    df = run_query(
-        "extract_wafers", engine, start=start, end=end, cutoff=cutoff, exclude_after=exclude_after
-    )
-    df[schema.TIME_COL] = pd.to_datetime(df[schema.TIME_COL], format="ISO8601")
+    Parameters
+    ----------
+    dataset_version_id : str
+        Unique version identifier recorded in raw_records.
+    columns : list[str] | None, default None
+        Specific columns to select. If None, all columns are retrieved.
+    sample_n : int | None, default None
+        Maximum row count to return. If None, all available rows are returned.
+    sampling : {"contiguous", "random", "all"}, default "contiguous"
+        Sampling strategy when sample_n is specified:
+        - "contiguous": Sequential extraction ordered by source_row_number (ideal for time-series).
+        - "random": Uniform pseudo-random row extraction.
+        - "all": Ignores sampling limit and retrieves all rows.
+    engine : Engine | None, default None
+        SQLAlchemy engine instance. If None, uses default project engine.
 
-    if cutoff is not None:
-        n_clash = int((df[schema.TIME_COL] == pd.Timestamp(cutoff)).sum())
-        if n_clash:
-            raise ValueError(
-                f"{n_clash} wafers timestamped exactly at cutoff {cutoff}; "
-                "BETWEEN is inclusive — move the cutoff between wafers"
-            )
+    Returns
+    -------
+    pd.DataFrame
+        Extracted bronze dataset records.
+    """
+    db_engine = engine or get_engine()
 
-    if exclude_after is not None:
-        n_clash = int((df[schema.TIME_COL] == pd.Timestamp(exclude_after)).sum())
-        if n_clash:
-            raise ValueError(
-                f"{n_clash} wafers timestamped exactly at exclude_after {exclude_after}; "
-                "BETWEEN is inclusive — move the exclude_after between wafers"
-            )
+    # Quote column identifiers to handle special characters (e.g., "[K]", spaces)
+    if columns is not None:
+        quoted_cols = ", ".join(f'"{col}"' for col in columns)
+    else:
+        quoted_cols = "*"
 
-    register_columns(
-        [
-            {
-                "column_name": schema.SPLIT_COL,
-                "role": schema.Role.METADATA.value,
-                "status": schema.Status.ACTIVE.value,
-                "col_index": None,
-                "missing_pct": 0.0,
-                "derived_from": schema.TIME_COL,
-                "notes": "cv/holdout label from config.CUTOFF",
-            }
-        ],
-        engine,
-    )
+    query_parts = [
+        f"SELECT {quoted_cols} FROM raw_records",
+        "WHERE dataset_version_id = :dataset_version_id",
+    ]
+    params: dict[str, str | int] = {"dataset_version_id": dataset_version_id}
+
+    if sample_n is not None and sampling != "all":
+        if sampling == "random":
+            query_parts.append("ORDER BY RANDOM() LIMIT :limit")
+        elif sampling == "contiguous":
+            query_parts.append("ORDER BY source_row_number ASC LIMIT :limit")
+        else:
+            msg = f"Unsupported sampling strategy: '{sampling}'. Choose 'contiguous', 'random', or 'all'."
+            raise ValueError(msg)
+        params["limit"] = sample_n
+    else:
+        query_parts.append("ORDER BY source_row_number ASC")
+
+    query_sql = " ".join(query_parts)
+
+    with db_engine.connect() as conn:
+        df = pd.read_sql(text(query_sql), conn, params=params)
+
+    if df.empty:
+        logger.warning(
+            "Extraction returned 0 rows for dataset_version_id='%s'",
+            dataset_version_id,
+        )
+    else:
+        logger.info(
+            "Extracted %d rows and %d columns from bronze (version: '%s', strategy: '%s')",
+            len(df),
+            df.shape[1],
+            dataset_version_id,
+            sampling if sample_n else "full",
+        )
+
     return df
-
-
-def main() -> None:
-    global logger
-    logger = setup_logging(logfile=LOGS / "extract.log")
-    logger.info("[extract] start")
-    engine = get_engine()
-    df = extract(engine)
-    logger.info(
-        "[extract] frame %s; split counts: %s",
-        df.shape,
-        df[schema.SPLIT_COL].value_counts().to_dict(),
-    )
-    logger.info("[extract] done")
-
-
-if __name__ == "__main__":
-    main()
