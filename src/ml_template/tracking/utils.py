@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -75,3 +76,16 @@ def setup_logging(
             base_logger.addHandler(run_fh)
 
     return base_logger
+
+
+def git_sha() -> str:
+    """Return the current Git commit hash or 'unknown'."""
+    try:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except Exception:
+        return "unknown"

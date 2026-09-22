@@ -25,6 +25,7 @@ class SourceMetadata:
     encoding: str
     delimiter: str
 
+
 @dataclass(frozen=True)
 class ObservedSchema:
     row_count: int
@@ -34,10 +35,12 @@ class ObservedSchema:
     null_counts: dict[str, int]
     flag_cardinality: dict[str, int]
 
+
 @dataclass(frozen=True)
 class ProposedCanonicalSchema:
     dtypes: dict[str, str]
     binary_flags: list[str]
+
 
 @dataclass(frozen=True)
 class SourceInspectionReport:
@@ -57,6 +60,7 @@ class SourceInspectionReport:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(self.to_json(), encoding="utf-8")
 
+
 # %%
 def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     digest = hashlib.sha256()
@@ -64,6 +68,7 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
         for chunk in iter(lambda: file.read(chunk_size), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
 
 # %%
 encoding = "utf-8"
@@ -136,4 +141,3 @@ short_hash = report.source.source_sha256[:12]
 artifact_path = ARTIFACTS / "inspection" / f"{source_path.stem}__sha256-{short_hash}.json"
 report.save(artifact_path)
 print(f"Inspection report saved to: {artifact_path}")
-

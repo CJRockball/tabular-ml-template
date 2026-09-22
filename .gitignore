@@ -51,6 +51,8 @@ data/raw/*
 # Processed intermediates: regenerate deterministically from code + config.
 data/processed/*
 !data/processed/.gitignore
+# Scrap file
+/todo.txt
 # SQLite DB is derived: rebuild via the ingest entry point.
 # NOTE: the pattern ".db" (previous version) matches only a file literally
 # named ".db" — it never ignored secom.db. The glob is required.
