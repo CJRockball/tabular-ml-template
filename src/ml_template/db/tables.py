@@ -23,6 +23,7 @@ TYPE_MAP = {
     "string": String,
     "str": String,
     "object": String,
+    "category": String,
     "int8": Integer,
     "int16": Integer,
     "int32": Integer,
