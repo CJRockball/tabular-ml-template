@@ -46,10 +46,7 @@ def extract_bronze(
     db_engine = engine or get_engine()
 
     # Quote column identifiers to handle special characters (e.g., "[K]", spaces)
-    if columns is not None:
-        quoted_cols = ", ".join(f'"{col}"' for col in columns)
-    else:
-        quoted_cols = "*"
+    quoted_cols = ", ".join(f'"{col}"' for col in columns) if columns is not None else "*"
 
     query_parts = [
         f"SELECT {quoted_cols} FROM raw_records",

@@ -75,3 +75,37 @@ validation:
   allowed_target_values: [0, 1]
   require_unique_entity_id: true
   max_missing_rate: 0.0
+
+# silver contract from eda
+silver_eda_contract:
+  canonical_names:
+    UDI: udi
+    Product ID: product_id
+    Type: type
+    "Air temperature [K]": air_temperature_k
+    "Process temperature [K]": process_temperature_k
+    "Rotational speed [rpm]": rotational_speed_rpm
+    "Torque [Nm]": torque_nm
+    "Tool wear [min]": tool_wear_min
+    Machine failure: machine_failure
+    TWF: twf
+    HDF: hdf
+    PWF: pwf
+    OSF: osf
+    RNF: rnf
+
+  canonical_dtypes:
+    udi: int64
+    product_id: string
+    type: category
+    air_temperature_k: float64
+    process_temperature_k: float64
+    rotational_speed_rpm: int64
+    torque_nm: float64
+    tool_wear_min: int64
+    machine_failure: int8
+    twf: int8
+    hdf: int8
+    pwf: int8
+    osf: int8
+    rnf: int8

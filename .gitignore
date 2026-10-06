@@ -51,6 +51,9 @@ data/raw/*
 # Processed intermediates: regenerate deterministically from code + config.
 data/processed/*
 !data/processed/.gitignore
+# notebooks
+notebooks/*
+!notebooks/.gitignore
 # Scrap file
 /todo.txt
 # SQLite DB is derived: rebuild via the ingest entry point.
