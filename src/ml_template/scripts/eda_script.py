@@ -84,8 +84,8 @@ def load_and_canonicalize(
     engine = get_engine()
     df = extract_bronze(dataset_version_id=dataset_version_id, engine=engine)
 
-    canonical_names = data_config["canonical_names"]
-    canonical_dtypes = data_config["canonical_dtypes"]
+    canonical_names = data_config["silver_eda_contract"]["canonical_names"]
+    canonical_dtypes = data_config["silver_eda_contract"]["canonical_dtypes"]
     df = df.rename(columns=canonical_names).astype(canonical_dtypes)
 
     roles = data_config["bronze_source_contract"]["roles"]
@@ -113,7 +113,10 @@ def check_duplicates(df: pd.DataFrame) -> int:
 # Section 2 -- target and outcomes
 # --------------------------------------------------------------------------- #
 def summarize_targets(df: pd.DataFrame, all_targets: list[str]) -> dict[str, Any]:
-    vc_list = [df[name].value_counts() for name in all_targets]
+    vc_list = [
+    df[name].value_counts().reindex([0, 1], fill_value=0)
+    for name in all_targets
+]
     vc_df = pd.concat(vc_list, axis=1, keys=all_targets).T
     n = len(df)
     vc_df["proportion_%"] = round(vc_df.get(1, 0) / n * 100, 2)
@@ -390,10 +393,11 @@ def propose_silver_contract(report: EdaReport, data_config: dict[str, Any]) -> d
     deliberately excluded -- they belong in the model pipeline.
     """
     return {
-        "canonical_names": data_config["canonical_names"],
-        "canonical_dtypes": data_config["canonical_dtypes"],
+        "canonical_names": data_config["silver_eda_contract"]["canonical_names"],
+        "canonical_dtypes": data_config["silver_eda_contract"]["canonical_dtypes"],
         "roles": data_config["bronze_source_contract"]["roles"],
-        "expected_row_count": report.row_count,
+        "expected_row_count": data_config["bronze_source_contract"]['rows'],
+        "reported_row_count": report.row_count,
         "row_count_severity": "error",
         "nullability_policy": "no_structural_nulls_expected",
         "sentinel_values_found": report.missing_values.get("sentinel_hits", {}),
