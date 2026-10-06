@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib
+
 matplotlib.use("Agg")  # headless: never call plt.show() in a script
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -31,18 +32,16 @@ import yaml
 from matplotlib.colors import LinearSegmentedColormap
 from scipy.stats import chi2_contingency
 from sklearn.ensemble import IsolationForest
-from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
+from sklearn.feature_selection import mutual_info_classif
 
-from ml_template.tracking.utils import setup_logging
 from ml_template.data.extract import extract_bronze
 from ml_template.db.connection import get_engine
+from ml_template.tracking.utils import setup_logging
 
 logger = logging.getLogger("ml_template.scripts.eda")
 
 BI_COLORS = ["#008BFB", "#FF0051"]
-CMAP_DIV = LinearSegmentedColormap.from_list(
-    "shap_div", ["#008BFB", "#ffffff", "#FF0051"], N=512
-)
+CMAP_DIV = LinearSegmentedColormap.from_list("shap_div", ["#008BFB", "#ffffff", "#FF0051"], N=512)
 
 
 # --------------------------------------------------------------------------- #
@@ -90,8 +89,7 @@ def load_and_canonicalize(
 
     roles = data_config["bronze_source_contract"]["roles"]
     role_map = {
-        role: [canonical_names.get(col, col) for col in cols]
-        for role, cols in roles.items()
+        role: [canonical_names.get(col, col) for col in cols] for role, cols in roles.items()
     }
     logger.info(
         "Loaded %d rows, %d columns for dataset_version_id=%s",
@@ -113,10 +111,7 @@ def check_duplicates(df: pd.DataFrame) -> int:
 # Section 2 -- target and outcomes
 # --------------------------------------------------------------------------- #
 def summarize_targets(df: pd.DataFrame, all_targets: list[str]) -> dict[str, Any]:
-    vc_list = [
-    df[name].value_counts().reindex([0, 1], fill_value=0)
-    for name in all_targets
-]
+    vc_list = [df[name].value_counts().reindex([0, 1], fill_value=0) for name in all_targets]
     vc_df = pd.concat(vc_list, axis=1, keys=all_targets).T
     n = len(df)
     vc_df["proportion_%"] = round(vc_df.get(1, 0) / n * 100, 2)
@@ -124,9 +119,7 @@ def summarize_targets(df: pd.DataFrame, all_targets: list[str]) -> dict[str, Any
     return vc_df.to_dict(orient="index")
 
 
-def check_label_consistency(
-    df: pd.DataFrame, target: str, outcome: list[str]
-) -> dict[str, Any]:
+def check_label_consistency(df: pd.DataFrame, target: str, outcome: list[str]) -> dict[str, Any]:
     n_fmodes = df[outcome].sum(axis=1)
     consistency = {
         "failure_mode_positive_no_target": int(((n_fmodes > 0) & (df[target] == 0)).sum()),
@@ -171,9 +164,7 @@ def plot_target_grid(df: pd.DataFrame, all_targets: list[str], out_dir: Path) ->
 SENTINEL_CANDIDATES = [-1, -99, -999, -9999, 999, 9999, 99999]
 
 
-def check_missing_and_sentinels(
-    df: pd.DataFrame, num_feature: list[str]
-) -> dict[str, Any]:
+def check_missing_and_sentinels(df: pd.DataFrame, num_feature: list[str]) -> dict[str, Any]:
     missing = df.isnull().sum()
     missing = missing[missing > 0].to_dict()
 
@@ -184,9 +175,7 @@ def check_missing_and_sentinels(
             sentinel_hits[col] = found
 
     negative_on_positive_domain = {
-        col: int((df[col] < 0).sum())
-        for col in num_feature
-        if (df[col] < 0).any()
+        col: int((df[col] < 0).sum()) for col in num_feature if (df[col] < 0).any()
     }
 
     return {
@@ -272,9 +261,7 @@ def mutual_information_scores(
     for col in cat_feature:
         x[col] = x[col].astype("category").cat.codes
     discrete_mask = [col in cat_feature for col in feature]
-    mi = mutual_info_classif(
-        x, df[target], discrete_features=discrete_mask, random_state=0
-    )
+    mi = mutual_info_classif(x, df[target], discrete_features=discrete_mask, random_state=0)
     return dict(sorted(zip(feature, mi.tolist(), strict=True), key=lambda kv: -kv[1]))
 
 
@@ -282,8 +269,14 @@ def plot_heatmap(matrix: pd.DataFrame, title: str, out_path: Path) -> Path:
     mask = np.triu(np.ones_like(matrix, dtype=bool))
     fig = plt.figure(figsize=(8, 6.5))
     sns.heatmap(
-        matrix, mask=mask, annot=True, fmt=".2f", cmap=CMAP_DIV,
-        center=0, square=True, linewidths=0.5,
+        matrix,
+        mask=mask,
+        annot=True,
+        fmt=".2f",
+        cmap=CMAP_DIV,
+        center=0,
+        square=True,
+        linewidths=0.5,
     )
     plt.title(title, fontsize=13)
     fig.savefig(out_path, dpi=110, bbox_inches="tight")
@@ -341,7 +334,10 @@ def make_interaction_bins(
         values = pd.to_numeric(data[feature], errors="coerce").dropna()
         _, edges = pd.qcut(values, q=n_bins, labels=False, retbins=True, duplicates="drop")
         bins = edges.tolist()
-        labels = [f"{l:.{precision}f}\u2013{r:.{precision}f}" for l, r in zip(bins[:-1], bins[1:], strict=True)]
+        labels = [
+            f"{left:.{precision}f}\u2013{right:.{precision}f}"
+            for left, right in zip(bins[:-1], bins[1:], strict=True)
+        ]
         return bins, labels
 
     b1, l1 = _bins_and_labels(feature_1)
@@ -358,7 +354,10 @@ def interaction_failure_table(
     binned[f"{feature_2}_bin"] = pd.cut(df[feature_2], bins=b2, labels=l2, include_lowest=True)
 
     failure_rate = pd.crosstab(
-        binned[f"{feature_1}_bin"], binned[f"{feature_2}_bin"], values=binned[target], aggfunc="mean"
+        binned[f"{feature_1}_bin"],
+        binned[f"{feature_2}_bin"],
+        values=binned[target],
+        aggfunc="mean",
     )
     cell_count = pd.crosstab(binned[f"{feature_1}_bin"], binned[f"{feature_2}_bin"])
     return {
@@ -375,9 +374,12 @@ def screen_interaction_candidates(
     ranked = [f for f, _ in sorted(mi_scores.items(), key=lambda kv: -kv[1])][:top_n]
     candidates = []
     for f1, f2 in combinations(ranked, 2):
-        if f1 in spearman.columns and f2 in spearman.columns:
-            if abs(spearman.loc[f1, f2]) < corr_ceiling:
-                candidates.append((f1, f2))
+        if (
+            f1 in spearman.columns
+            and f2 in spearman.columns
+            and abs(spearman.loc[f1, f2]) < corr_ceiling
+        ):
+            candidates.append((f1, f2))
     return candidates
 
 
@@ -396,7 +398,7 @@ def propose_silver_contract(report: EdaReport, data_config: dict[str, Any]) -> d
         "canonical_names": data_config["silver_eda_contract"]["canonical_names"],
         "canonical_dtypes": data_config["silver_eda_contract"]["canonical_dtypes"],
         "roles": data_config["bronze_source_contract"]["roles"],
-        "expected_row_count": data_config["bronze_source_contract"]['rows'],
+        "expected_row_count": data_config["bronze_source_contract"]["rows"],
         "reported_row_count": report.row_count,
         "row_count_severity": "error",
         "nullability_policy": "no_structural_nulls_expected",
@@ -420,7 +422,9 @@ def run_eda(dataset_version_id: str, config_path: Path, out_dir: Path) -> EdaRep
     num_feature = [c for c in feature if c not in cat_feature]
     all_targets = [target] + outcome
 
-    report = EdaReport(dataset_version_id=dataset_version_id, row_count=len(df), col_count=df.shape[1])
+    report = EdaReport(
+        dataset_version_id=dataset_version_id, row_count=len(df), col_count=df.shape[1]
+    )
 
     # Section 1
     report.duplicate_rows = check_duplicates(df)

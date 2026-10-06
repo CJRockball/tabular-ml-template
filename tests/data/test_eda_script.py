@@ -64,9 +64,7 @@ def test_load_count_names_dtypes_and_roles(canonical, config):
 
 def test_duplicate_count_matches_source_records(canonical, bronze):
     df, _ = canonical
-    source_cols = bronze.columns.difference(
-        ["dataset_version_id", "source_row_number"]
-    )
+    source_cols = bronze.columns.difference(["dataset_version_id", "source_row_number"])
     expected = int(bronze[source_cols].duplicated().sum())
     assert eda.check_duplicates(df) == expected
 
@@ -121,8 +119,9 @@ def test_run_eda_writes_machine_readable_report(bronze, config, tmp_path):
     assert saved["target_outcome_summary"]
     assert saved["numeric_summary"]
     assert saved["mutual_information"]
-    assert saved["proposed_silver_contract"]["canonical_names"] == (
-        config["silver_eda_contract"]["canonical_names"]
+    assert (
+        saved["proposed_silver_contract"]["canonical_names"]
+        == (config["silver_eda_contract"]["canonical_names"])
     )
     for name in (
         "target_outcome_distribution.png",
