@@ -21,7 +21,6 @@ import yaml
 from ml_template.data.extract import extract_bronze
 from ml_template.db.connection import get_engine
 
-
 logger = logging.getLogger("ml_template.scripts.silver")
 
 TEXT_DTYPES = {"object", "category", "string"}
