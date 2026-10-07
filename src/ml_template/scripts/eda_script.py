@@ -492,17 +492,19 @@ def main() -> None:
     out_dir = args.out / args.dataset_version_id
 
     engine = get_engine()
-    run_id = registry.start_eda_run(engine, args.dataset_version_id)
+    config_sha256 = hashlib.sha256(Path(args.config).read_bytes()).hexdigest()
+    run_id = registry.start_eda_run(
+        engine, args.dataset_version_id, config_sha256=config_sha256
+    )
+    report_path = out_dir / f"eda_report_{args.dataset_version_id}.json"
     try:
-        config_sha256 = hashlib.sha256(Path(args.config).read_bytes()).hexdigest()
-        run_id = registry.start_eda_run(
-            engine, args.dataset_version_id, config_sha256=config_sha256
-        )
+        run_eda(args.dataset_version_id, args.config, out_dir)
+        saved = json.loads(report_path.read_text())
     except Exception as exc:
-        registry.finish_eda_run(engine, run_id, succeeded=False, error_summary=str(exc)[:500])
+        registry.finish_eda_run(
+            engine, run_id, succeeded=False, error_summary=str(exc)[:500]
+        )
         raise
-    report_path = Path(out_dir) / f"eda_report_{args.dataset_version_id}.json"
-    saved = json.loads(report_path.read_text())
     registry.finish_eda_run(
         engine,
         run_id,
@@ -510,6 +512,7 @@ def main() -> None:
         row_count=saved.get("row_count"),
         report_path=str(report_path),
     )
+    logger.info("EDA completed: %s", report_path)
 
 
 if __name__ == "__main__":
