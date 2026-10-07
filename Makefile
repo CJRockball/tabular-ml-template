@@ -17,8 +17,8 @@ pipeline: ingest eda silver
 rebuild: clean pipeline
 
 clean:
-	find data -mindepth 1 -maxdepth 1 ! -name raw -exec rm -rf {} +
-	find artifacts logs assets -mindepth 1 ! -name .gitkeep -delete 2>/dev/null || true
+	find data -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name raw -exec rm -rf {} +
+	find artifacts logs assets -mindepth 1 ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
 
 check:
 	uv run ruff check && uv run pytest -q
