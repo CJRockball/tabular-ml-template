@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from ml_template.data.inspect import (
+from ml_template.data.inspect_bronze import (
     compute_schema_hash,
     inspect_source_schema,
     iter_batches,

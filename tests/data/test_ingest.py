@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from ml_template.data.ingest import _to_canonical_name, build_registry, insert_batches
-from ml_template.data.inspect import inspect_source_schema
+from ml_template.data.inspect_bronze import inspect_source_schema
 from ml_template.db.tables import setup_db
 from ml_template.paths import ROOT
 

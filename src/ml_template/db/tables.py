@@ -17,7 +17,7 @@ from sqlalchemy import (
 )
 
 if TYPE_CHECKING:
-    from ml_template.data.inspect import SourceStructuralSchema
+    from ml_template.data.inspect_bronze import SourceStructuralSchema
 
 TYPE_MAP = {
     "string": String,
