@@ -13,13 +13,14 @@ import logging
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import yaml
 
 from ml_template.data.extract import extract_bronze
 from ml_template.db.connection import get_engine
-#from ml_template.scripts.eda_script import load_and_canonicalize
+
 
 logger = logging.getLogger("ml_template.scripts.silver")
 
@@ -112,9 +113,7 @@ def check_gates(df: pd.DataFrame, roles: dict, config: dict) -> list[dict]:
         dup_udi = int(df["udi"].duplicated().sum())
         add("udi_unique", dup_udi == 0, f"duplicates={dup_udi}")
 
-    source_cols = [
-        c for c in df.columns if c not in {"dataset_version_id", "source_row_number"}
-    ]
+    source_cols = [c for c in df.columns if c not in {"dataset_version_id", "source_row_number"}]
     dup_rows = int(df.duplicated(subset=source_cols).sum())
     add("no_duplicate_source_records", dup_rows == 0, f"duplicates={dup_rows}")
 
@@ -213,7 +212,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--artifact-root", default="artifacts/quality")
     args = p.parse_args(argv)
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
     config_path = Path(args.config)
     config = yaml.safe_load(config_path.read_text())
 
@@ -222,7 +223,10 @@ def main(argv: list[str] | None = None) -> int:
     labels = report_label_inconsistencies(df, roles)
 
     return write_outputs(
-        df, roles, gates, labels,
+        df,
+        roles,
+        gates,
+        labels,
         dataset_name=args.dataset_name,
         dataset_version_id=args.dataset_version_id,
         config_path=config_path,
