@@ -19,6 +19,7 @@ import pandas as pd
 import yaml
 
 from ml_template.data.extract import extract_bronze
+from ml_template.db import registry
 from ml_template.db.connection import get_engine
 
 logger = logging.getLogger("ml_template.scripts.silver")
@@ -60,6 +61,10 @@ def load_and_canonicalize(
         dataset_version_id,
     )
     return df, role_map
+
+
+def get_silver_version_id(dataset_version_id: str, config_path: Path) -> str:
+    return f"silver_{dataset_version_id}_{sha256_bytes(config_path.read_bytes())[:8]}"
 
 
 def build_silver(dataset_version_id: str, config: dict) -> tuple[pd.DataFrame, dict]:
@@ -153,7 +158,7 @@ def write_outputs(
     artifact_root: Path,
 ) -> int:
     config_hash = sha256_bytes(config_path.read_bytes())
-    silver_version_id = f"silver_{dataset_version_id}_{config_hash[:8]}"
+    silver_version_id = get_silver_version_id(dataset_version_id, config_path)
     passed = all(g["passed"] for g in gates)
 
     quality_dir = artifact_root / dataset_name / silver_version_id
@@ -221,17 +226,34 @@ def main(argv: list[str] | None = None) -> int:
     gates = check_gates(df, roles, config)
     labels = report_label_inconsistencies(df, roles)
 
-    return write_outputs(
-        df,
-        roles,
-        gates,
-        labels,
+    exit_code = write_outputs(
+        df, roles, gates, labels,
         dataset_name=args.dataset_name,
         dataset_version_id=args.dataset_version_id,
         config_path=config_path,
         silver_root=Path(args.silver_root),
         artifact_root=Path(args.artifact_root),
     )
+    version = get_silver_version_id(args.dataset_version_id, config_path)
+    out_dir = Path(args.silver_root) / args.dataset_name / version
+    validation_path = Path(args.artifact_root) / args.dataset_name / version / "validation.json"
+    manifest = {}
+    if exit_code == 0:
+        manifest = json.loads((out_dir / "manifest.json").read_text())
+    registry.register_silver_build(
+        get_engine(),
+        silver_dataset_version_id=version,
+        dataset_version_id=args.dataset_version_id,
+        succeeded=exit_code == 0,
+        validation_path=str(validation_path),
+        manifest_path=str(out_dir / "manifest.json") if exit_code == 0 else None,
+        parquet_path=manifest.get("parquet_path"),
+        row_count=manifest.get("row_count"),
+        config_sha256=manifest.get("config_sha256"),
+        parquet_sha256=manifest.get("parquet_sha256"),
+        error_summary=None if exit_code == 0 else "validation gates failed",
+    )
+    return exit_code
 
 
 if __name__ == "__main__":
