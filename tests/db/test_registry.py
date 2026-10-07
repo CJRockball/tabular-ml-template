@@ -48,9 +48,7 @@ def test_failed_build_can_be_retried_with_same_id(engine):
 
 def test_eda_run_lifecycle(engine):
     run_id = registry.start_eda_run(engine, "ds_v1", config_sha256="abc")
-    registry.finish_eda_run(
-        engine, run_id, succeeded=True, row_count=27, report_path="r.json"
-    )
+    registry.finish_eda_run(engine, run_id, succeeded=True, row_count=27, report_path="r.json")
     with engine.connect() as conn:
         row = conn.execute(select(registry.eda_runs)).mappings().one()
     assert row["status"] == "succeeded"

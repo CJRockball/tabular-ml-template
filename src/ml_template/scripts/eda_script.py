@@ -13,9 +13,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
-import hashlib
 from dataclasses import asdict, dataclass, field
 from itertools import combinations
 from pathlib import Path
@@ -490,7 +490,7 @@ def main() -> None:
     logger.info("Starting EDA run for dataset_version_id=%s", args.dataset_version_id)
 
     out_dir = args.out / args.dataset_version_id
-    
+
     engine = get_engine()
     run_id = registry.start_eda_run(engine, args.dataset_version_id)
     try:
@@ -504,8 +504,11 @@ def main() -> None:
     report_path = Path(out_dir) / f"eda_report_{args.dataset_version_id}.json"
     saved = json.loads(report_path.read_text())
     registry.finish_eda_run(
-        engine, run_id, succeeded=True,
-        row_count=saved.get("row_count"), report_path=str(report_path),
+        engine,
+        run_id,
+        succeeded=True,
+        row_count=saved.get("row_count"),
+        report_path=str(report_path),
     )
 
 

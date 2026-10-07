@@ -227,7 +227,10 @@ def main(argv: list[str] | None = None) -> int:
     labels = report_label_inconsistencies(df, roles)
 
     exit_code = write_outputs(
-        df, roles, gates, labels,
+        df,
+        roles,
+        gates,
+        labels,
         dataset_name=args.dataset_name,
         dataset_version_id=args.dataset_version_id,
         config_path=config_path,

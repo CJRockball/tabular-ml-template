@@ -117,9 +117,7 @@ def latest_valid_silver(
     return dict(row) if row else None
 
 
-def start_eda_run(
-    engine: Engine, dataset_version_id: str, config_sha256: str | None = None
-) -> str:
+def start_eda_run(engine: Engine, dataset_version_id: str, config_sha256: str | None = None) -> str:
     ensure_tables(engine)
     run_id = uuid.uuid4().hex
     with engine.begin() as conn:
