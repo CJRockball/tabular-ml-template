@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -35,6 +36,7 @@ from sklearn.ensemble import IsolationForest
 from sklearn.feature_selection import mutual_info_classif
 
 from ml_template.data.extract import extract_bronze
+from ml_template.db import registry
 from ml_template.db.connection import get_engine
 from ml_template.tracking.utils import setup_logging
 
@@ -488,7 +490,26 @@ def main() -> None:
     logger.info("Starting EDA run for dataset_version_id=%s", args.dataset_version_id)
 
     out_dir = args.out / args.dataset_version_id
-    run_eda(args.dataset_version_id, args.config, out_dir)
+
+    engine = get_engine()
+    run_id = registry.start_eda_run(engine, args.dataset_version_id)
+    try:
+        config_sha256 = hashlib.sha256(Path(args.config).read_bytes()).hexdigest()
+        run_id = registry.start_eda_run(
+            engine, args.dataset_version_id, config_sha256=config_sha256
+        )
+    except Exception as exc:
+        registry.finish_eda_run(engine, run_id, succeeded=False, error_summary=str(exc)[:500])
+        raise
+    report_path = Path(out_dir) / f"eda_report_{args.dataset_version_id}.json"
+    saved = json.loads(report_path.read_text())
+    registry.finish_eda_run(
+        engine,
+        run_id,
+        succeeded=True,
+        row_count=saved.get("row_count"),
+        report_path=str(report_path),
+    )
 
 
 if __name__ == "__main__":
