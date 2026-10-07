@@ -21,7 +21,7 @@ from sqlalchemy import (
     text,
 )
 
-from ml_template.data.inspect import (
+from ml_template.data.inspect_bronze import (
     SourceStructuralSchema,
     inspect_source_schema,
     iter_batches,

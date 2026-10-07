@@ -1,0 +1,54 @@
+{
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364",
+  "dataset_version_id": "ds_v1",
+  "created_at": "2026-10-07T01:15:38.134519+00:00",
+  "row_count": 10000,
+  "columns": {
+    "dataset_version_id": "str",
+    "source_row_number": "int64",
+    "udi": "int64",
+    "product_id": "string",
+    "type": "category",
+    "air_temperature_k": "float64",
+    "process_temperature_k": "float64",
+    "rotational_speed_rpm": "int64",
+    "torque_nm": "float64",
+    "tool_wear_min": "int64",
+    "machine_failure": "int8",
+    "twf": "int8",
+    "hdf": "int8",
+    "pwf": "int8",
+    "osf": "int8",
+    "rnf": "int8"
+  },
+  "roles": {
+    "id": [
+      "udi",
+      "product_id"
+    ],
+    "feature": [
+      "type",
+      "air_temperature_k",
+      "process_temperature_k",
+      "rotational_speed_rpm",
+      "torque_nm",
+      "tool_wear_min"
+    ],
+    "target": [
+      "machine_failure"
+    ],
+    "outcome": [
+      "twf",
+      "hdf",
+      "pwf",
+      "osf",
+      "rnf"
+    ]
+  },
+  "config_path": "configs/ai4i_binary.yaml",
+  "config_sha256": "eaa07364edf288d76b602efabe97243fc7f0298874e449f7821084c3652d3868",
+  "parquet_path": "data/silver/ai4i/silver_ds_v1_eaa07364/data.parquet",
+  "parquet_sha256": "9599250f687812752582779f5fc69ee5ac1ef9c361cd1b39bf6e5b242d186551",
+  "validation_report": "artifacts/quality/ai4i/silver_ds_v1_eaa07364/validation.json",
+  "validation_passed": true
+}

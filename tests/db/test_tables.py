@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy import inspect as sa_inspect
 
-from ml_template.data.inspect import inspect_source_schema
+from ml_template.data.inspect_bronze import inspect_source_schema
 from ml_template.db.tables import setup_db
 from ml_template.paths import ROOT
 
