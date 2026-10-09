@@ -1,158 +1,181 @@
-"""Decision-layer evaluation: thresholds, precision/recall, confusion matrix.
+"""Pure metric functions for binary classification.
 
-Ranking metrics (PR-AUC, ROC-AUC, Brier) are computed in train_xgb.py.
-This module answers the operational question: at a chosen flagging
-threshold, how many fails do we catch and how many false alarms do we buy?
+No database, config or file access. Called by training (CV predictions) and by
+evaluation (holdout, reruns on stored predictions).
 
-Rules
------
-- Thresholds are tuned on OOF (cross-validated) predictions ONLY, then
-  applied once to the time-blocked holdout. Never tune on the holdout.
-- Always report raw counts alongside rates: the holdout has ~15 fails.
+Alert-rate metrics flag the top ``ceil(rate * n)`` rows by score. Ties are broken
+by row order (stable sort), so results are deterministic.
+
+Result keys: ``pr_auc``, ``roc_auc``, ``brier``, and for alert metrics
+``recall_at_5pct`` / ``precision_at_5pct`` (one key per alert rate).
+Undefined results (for example one class only) are NaN. Store them as NULL.
 """
 
-from pathlib import Path
+from __future__ import annotations
 
-import matplotlib.pyplot as plt
+import math
+from collections.abc import Sequence
+from typing import Any
+
 import numpy as np
-import pandas as pd
-import seaborn as sns
-from sklearn.metrics import (
-    average_precision_score,
-    confusion_matrix,
-    f1_score,
-    matthews_corrcoef,
-    precision_recall_curve,
-    precision_score,
-    recall_score,
+from sklearn.metrics import average_precision_score, brier_score_loss, roc_auc_score
+
+NAN = float("nan")
+
+METRIC_NAMES = frozenset(
+    {"pr_auc", "roc_auc", "brier", "recall_at_alert_rate", "precision_at_alert_rate"}
 )
-
-from ml_template.tracking.utils import setup_logging
-
-logger = setup_logging()
+ALERT_METRICS = frozenset({"recall_at_alert_rate", "precision_at_alert_rate"})
 
 
-def tune_threshold(y_true, scores, criterion: str = "mcc") -> float:
-    """Choose a flagging threshold on OOF scores.
+def _prepare(y_true: Any, y_score: Any) -> tuple[np.ndarray, np.ndarray]:
+    y = np.asarray(y_true)
+    s = np.asarray(y_score, dtype=float)
+    if y.ndim != 1 or s.ndim != 1 or len(y) != len(s):
+        raise ValueError("y_true and y_score must be 1-D and of equal length")
+    if len(y) == 0:
+        raise ValueError("empty input")
+    if not np.isfinite(s).all():
+        raise ValueError("y_score contains NaN or inf")
+    if not np.isin(y, (0, 1)).all():
+        raise ValueError("y_true must contain only 0 and 1")
+    return y.astype(int), s
 
-    criterion: 'f1' or 'mcc'. MCC is the stabler choice at 6.6% prevalence.
+
+def _has_both_classes(y: np.ndarray) -> bool:
+    return 0 < int(y.sum()) < len(y)
+
+
+def _check_rate(rate: float) -> None:
+    if not 0 < rate <= 1:
+        raise ValueError(f"alert rate must be in (0, 1], got {rate}")
+
+
+def alert_label(rate: float) -> str:
+    """Stable name fragment for an alert rate, e.g. 0.05 -> '5pct'."""
+    return f"{round(rate * 100, 6):g}pct"
+
+
+def metric_key(name: str, rate: float | None = None) -> str:
+    """Key used in result dicts and in the run_metrics table."""
+    if name in ALERT_METRICS:
+        if rate is None:
+            raise ValueError(f"{name} needs an alert rate")
+        _check_rate(rate)
+        return f"{name.replace('_alert_rate', '')}_{alert_label(rate)}"
+    return name
+
+
+def resolved_keys(names: Sequence[str], alert_rates: Sequence[float] = ()) -> list[str]:
+    """All result keys that ``compute_metrics`` will produce for this request."""
+    unknown = set(names) - METRIC_NAMES
+    if unknown:
+        raise ValueError(f"unknown metrics {sorted(unknown)}; allowed: {sorted(METRIC_NAMES)}")
+    keys: list[str] = []
+    for name in names:
+        if name in ALERT_METRICS:
+            if not alert_rates:
+                raise ValueError(f"{name} requested but alert_rates is empty")
+            keys.extend(metric_key(name, rate) for rate in alert_rates)
+        else:
+            keys.append(name)
+    return keys
+
+
+def pr_auc(y_true: Any, y_score: Any) -> float:
+    """Average precision. NaN if only one class is present."""
+    y, s = _prepare(y_true, y_score)
+    return float(average_precision_score(y, s)) if _has_both_classes(y) else NAN
+
+
+def roc_auc(y_true: Any, y_score: Any) -> float:
+    y, s = _prepare(y_true, y_score)
+    return float(roc_auc_score(y, s)) if _has_both_classes(y) else NAN
+
+
+def brier(y_true: Any, y_score: Any) -> float:
+    """Brier score. ``y_score`` must be a probability in [0, 1]."""
+    y, s = _prepare(y_true, y_score)
+    if s.min() < 0 or s.max() > 1:
+        raise ValueError("brier needs probabilities in [0, 1]")
+    return float(brier_score_loss(y, s))
+
+
+def _top_k_hits(y: np.ndarray, s: np.ndarray, rate: float) -> tuple[int, int]:
+    _check_rate(rate)
+    k = max(1, math.ceil(round(rate * len(y), 9)))
+    order = np.argsort(-s, kind="stable")
+    return int(y[order[:k]].sum()), k
+
+
+def recall_at_alert_rate(y_true: Any, y_score: Any, rate: float) -> float:
+    """Share of all positives found in the top ``rate`` of scores."""
+    y, s = _prepare(y_true, y_score)
+    positives = int(y.sum())
+    hits, _ = _top_k_hits(y, s, rate)
+    return hits / positives if positives else NAN
+
+
+def precision_at_alert_rate(y_true: Any, y_score: Any, rate: float) -> float:
+    """Share of the top ``rate`` of scores that are positive."""
+    y, s = _prepare(y_true, y_score)
+    hits, k = _top_k_hits(y, s, rate)
+    return hits / k
+
+
+def compute_metrics(
+    y_true: Any,
+    y_score: Any,
+    names: Sequence[str],
+    alert_rates: Sequence[float] = (),
+) -> dict[str, float]:
+    """Compute the requested metrics. Alert metrics expand once per rate."""
+    resolved_keys(names, alert_rates)  # validates names and rates up front
+    out: dict[str, float] = {}
+    for name in names:
+        if name == "recall_at_alert_rate":
+            for rate in alert_rates:
+                out[metric_key(name, rate)] = recall_at_alert_rate(y_true, y_score, rate)
+        elif name == "precision_at_alert_rate":
+            for rate in alert_rates:
+                out[metric_key(name, rate)] = precision_at_alert_rate(y_true, y_score, rate)
+        elif name == "pr_auc":
+            out[name] = pr_auc(y_true, y_score)
+        elif name == "roc_auc":
+            out[name] = roc_auc(y_true, y_score)
+        else:
+            out[name] = brier(y_true, y_score)
+    return out
+
+
+def long_form_metrics(
+    y_true: Any,
+    y_score: Any,
+    names: Sequence[str],
+    alert_rates: Sequence[float] = (),
+    *,
+    split: str,
+    folds: Any = None,
+) -> list[dict[str, Any]]:
+    """Rows shaped for the run_metrics table: split, fold, metric, value.
+
+    ``fold = -1`` marks the pooled result over all rows. With ``folds`` given (one
+    fold id per row), per-fold rows are added as well.
     """
-    y_true = np.asarray(y_true)
-    scores = np.asarray(scores)
-    prec, rec, thr = precision_recall_curve(y_true, scores)
-    prec, rec = prec[:-1], rec[:-1]  # align with thr
+    y = np.asarray(y_true)
+    s = np.asarray(y_score, dtype=float)
+    rows: list[dict[str, Any]] = []
 
-    if criterion == "f1":
-        f1 = 2 * prec * rec / np.maximum(prec + rec, 1e-12)
-        i = int(np.nanargmax(f1))
-    elif criterion == "mcc":
-        mccs = [matthews_corrcoef(y_true, scores >= t) for t in thr]
-        i = int(np.argmax(mccs))
-    else:
-        raise ValueError(f"unknown criterion: {criterion}")
+    def add(fold: int, yy: np.ndarray, ss: np.ndarray) -> None:
+        for metric, value in compute_metrics(yy, ss, names, alert_rates).items():
+            rows.append({"split": split, "fold": fold, "metric": metric, "value": value})
 
-    logger.info(
-        f"Threshold tuned on OOF ({criterion}): {thr[i]:.4f} "
-        f"(precision={prec[i]:.3f}, recall={rec[i]:.3f})"
-    )
-    return float(thr[i])
-
-
-def classification_summary(y_true, scores, threshold: float) -> pd.Series:
-    """Precision/recall/F1/MCC/FPR plus raw counts at a fixed threshold."""
-    y_true = np.asarray(y_true)
-    y_pred = (np.asarray(scores) >= threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[0, 1]).ravel()
-    return pd.Series(
-        {
-            "threshold": threshold,
-            "precision": precision_score(y_true, y_pred, zero_division=0),
-            "recall": recall_score(y_true, y_pred, zero_division=0),
-            "f1": f1_score(y_true, y_pred, zero_division=0),
-            "mcc": matthews_corrcoef(y_true, y_pred),
-            "fpr": fp / max(fp + tn, 1),
-            "tp": tp,
-            "fp": fp,
-            "fn": fn,
-            "tn": tn,
-        }
-    )
-
-
-def operating_points(y_true, scores, recall_targets=(0.5, 0.6, 0.7)) -> pd.DataFrame:
-    """The cost table: precision paid for each recall level.
-
-    For each recall target, the threshold achieving it with the best
-    precision. This is the decision table for 'a missed fail costs K
-    false alarms' conversations.
-    """
-    prec, rec, thr = precision_recall_curve(y_true, scores)
-    prec, rec = prec[:-1], rec[:-1]
-    rows = []
-    for rt in recall_targets:
-        ok = np.flatnonzero(rec >= rt)
-        if len(ok) == 0:
-            continue
-        i = ok[np.argmax(prec[ok])]
-        rows.append(
-            {
-                "recall_target": rt,
-                "threshold": float(thr[i]),
-                "precision": float(prec[i]),
-                "recall": float(rec[i]),
-            }
-        )
-    return pd.DataFrame(rows)
-
-
-def save_pr_curve(y_true, scores, out: Path, label: str = "XGBoost") -> None:
-    """PR curve with the no-skill prevalence line — the README figure."""
-    prec, rec, _ = precision_recall_curve(y_true, scores)
-    ap = average_precision_score(y_true, scores)
-    base = float(np.mean(y_true))
-
-    fig, ax = plt.subplots(figsize=(5, 4))
-    ax.plot(rec, prec, lw=2, label=f"{label} (AP={ap:.3f})")
-    ax.axhline(base, ls="--", color="gray", label=f"no skill ({base:.3f})")
-    ax.set_xlabel("Recall")
-    ax.set_ylabel("Precision")
-    ax.set_title("Precision–recall, holdout")
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
-    logger.info(f"PR curve saved to {out}")
-
-
-def save_confusion_heatmap(
-    y_true, scores, threshold: float, out: Path, title: str = "Holdout"
-) -> None:
-    """Confusion matrix heatmap at the tuned threshold, counts annotated."""
-    y_pred = (np.asarray(scores) >= threshold).astype(int)
-    cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-
-    fig, ax = plt.subplots(figsize=(4.2, 3.6))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        cbar=False,
-        xticklabels=["pred pass", "pred fail"],
-        yticklabels=["true pass", "true fail"],
-        ax=ax,
-    )
-    ax.set_title(f"{title} @ threshold={threshold:.3f}")
-    fig.tight_layout()
-    fig.savefig(out, dpi=150)
-    plt.close(fig)
-    logger.info(f"Confusion matrix saved to {out}")
-
-
-def recall_at_flagrate(y_true, scores, q: float) -> tuple[float, int]:
-    """Recall when flagging the top-q fraction by score. Transfers a RATE
-    across regimes instead of a threshold — robust to calibration drift."""
-    y_true = np.asarray(y_true)
-    k = max(1, int(len(scores) * q))
-    top = np.argsort(scores)[::-1][:k]
-    return float(y_true[top].sum() / y_true.sum()), k
+    add(-1, y, s)
+    if folds is not None:
+        f = np.asarray(folds)
+        if len(f) != len(y):
+            raise ValueError("folds must have one entry per row")
+        for fold in sorted({int(x) for x in f}):
+            mask = f == fold
+            add(fold, y[mask], s[mask])
+    return rows
