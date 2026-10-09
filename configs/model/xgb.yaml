@@ -1,0 +1,17 @@
+# Default XGBoost parameters. Experiment files override single keys.
+# Defaults are deliberately plain; the old SECOM values (n_estimators 5000,
+# max_bin 511, reg_alpha 3) belonged to a different dataset.
+type: xgb
+params:
+  objective: binary:logistic
+  n_estimators: 300
+  max_depth: 4
+  learning_rate: 0.05
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 1.0
+  reg_lambda: 1.0
+  reg_alpha: 0.0
+  max_bin: 256
+  scale_pos_weight: null
+  early_stopping_rounds: null
