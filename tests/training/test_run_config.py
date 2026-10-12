@@ -21,12 +21,29 @@ def _write(tmp_path: Path, extra: str = "") -> Path:
     return exp
 
 
-def test_load_and_override(tmp_path):
+def test_load_defaults_and_override(tmp_path):
     cfg = rc.load_config(_write(tmp_path), ["model.params.max_depth=7", "seed=1"])
     assert cfg.model.params.max_depth == 7
     assert cfg.seed == 1
-    assert cfg.split.n_folds == 5
-    assert cfg.schema_version == 1
+    assert cfg.schema_version == 2
+    p = cfg.model.params
+    assert (p.early_stopping_rounds, p.scale_pos_weight, p.device) == (50, "auto", "cpu")
+    assert cfg.training.validation_fraction == 0.2
+
+
+def test_scale_pos_weight_accepts_auto_or_positive_number(tmp_path):
+    exp = _write(tmp_path)
+    assert (
+        rc.load_config(exp, ["model.params.scale_pos_weight=10"]).model.params.scale_pos_weight
+        == 10
+    )
+    assert (
+        rc.load_config(exp, ["model.params.scale_pos_weight=auto"]).model.params.scale_pos_weight
+        == "auto"
+    )
+    for bad in ("0", "-1", "none"):
+        with pytest.raises(ValidationError):
+            rc.load_config(exp, [f"model.params.scale_pos_weight={bad}"])
 
 
 def test_invalid_values_rejected(tmp_path):
@@ -35,11 +52,17 @@ def test_invalid_values_rejected(tmp_path):
         "model.params.max_dept=3",  # unknown key
         "model.params.learning_rate=-1",
         "model.params.objective=reg:squarederror",
+        "model.params.early_stopping_rounds=null",  # early stopping is required
+        "model.params.early_stopping_rounds=0",
+        "model.params.device=tpu",
+        "training.validation_fraction=0.6",
+        "training.validation_fraction=0",
+        "training.refit_rounds_factor=5",
         "experiment_name=bad name",
         "metrics.primary=brier",  # not in names
         "metrics.alert_rates=[0, 0.1]",
         "split.holdout_fraction=1.5",
-        "schema_version=2",
+        "schema_version=1",
     ):
         with pytest.raises(ValidationError):
             rc.load_config(exp, [override])
@@ -58,15 +81,16 @@ def test_override_syntax_error(tmp_path):
 def test_hash_stable_and_sensitive(tmp_path):
     exp = _write(tmp_path)
     a, b = rc.load_config(exp), rc.load_config(exp)
-    c = rc.load_config(exp, ["model.params.max_depth=9"])
+    c = rc.load_config(exp, ["training.validation_fraction=0.25"])
     assert rc.config_hash(a) == rc.config_hash(b) != rc.config_hash(c)
 
 
 def test_flatten_params(tmp_path):
     flat = rc.flatten_params(rc.load_config(_write(tmp_path)))
     assert flat["model.params.max_depth"] == "4"
+    assert flat["model.params.scale_pos_weight"] == "auto"
     assert flat["metrics.alert_rates"] == "[0.05]"
-    assert flat["data.silver_dataset_version_id"] == "silver_x"
+    assert flat["training.refit_rounds_factor"] == "1.0"
 
 
 def test_expand_sweep(tmp_path):
@@ -74,12 +98,13 @@ def test_expand_sweep(tmp_path):
     sweep = tmp_path / "sweep.yaml"
     sweep.write_text(
         f"base: {exp}\nexperiment_name: grid1\ngrid:\n"
-        "  model.params.max_depth: [3, 5]\n  model.params.learning_rate: [0.1, 0.2, 0.3]\n"
+        "  model.params.max_depth: [3, 5]\n"
+        "  model.params.scale_pos_weight: [auto, 10]\n"
     )
     cfgs = rc.expand_sweep(sweep)
-    assert len(cfgs) == 6
+    assert len(cfgs) == 4
     assert {c.experiment_name for c in cfgs} == {"grid1"}
-    assert len({rc.config_hash(c) for c in cfgs}) == 6
+    assert len({rc.config_hash(c) for c in cfgs}) == 4
 
 
 def test_sweep_guards(tmp_path):
@@ -109,7 +134,8 @@ def test_resolve_path_falls_back_to_repo_root(tmp_path, monkeypatch):
 
 def test_repository_configs_are_valid():
     cfg = rc.load_config(CONFIGS / "experiment" / "xgb_baseline.yaml")
-    assert cfg.model.params.objective == "binary:logistic"
+    assert cfg.model.params.eval_metric == "aucpr"
+    assert cfg.model.params.n_estimators == 2000
     assert len(rc.expand_sweep(CONFIGS / "sweep" / "xgb_grid.yaml")) == 12
 
 

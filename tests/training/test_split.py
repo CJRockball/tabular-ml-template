@@ -12,9 +12,7 @@ KEY, TARGET = "udi", "machine_failure"
 def df():
     rng = np.random.default_rng(1)
     n = 1000
-    return pd.DataFrame(
-        {KEY: np.arange(1, n + 1), TARGET: (rng.random(n) < 0.05).astype(int)}
-    )
+    return pd.DataFrame({KEY: np.arange(1, n + 1), TARGET: (rng.random(n) < 0.05).astype(int)})
 
 
 def test_partition_sizes_and_stratification(df):
@@ -96,3 +94,17 @@ def test_save_load_roundtrip_and_immutability(df, tmp_path):
 def test_load_missing_split_message(tmp_path):
     with pytest.raises(FileNotFoundError, match="run the split step"):
         sp.load_split("split_nope", tmp_path)
+
+
+def test_register_split_is_idempotent(df, tmp_path):
+    pytest.importorskip("pyarrow")
+    sqlalchemy = pytest.importorskip("sqlalchemy")
+    cfg = SplitConfig()
+    a = sp.make_split(df, cfg, KEY, TARGET)
+    sid, path, manifest = sp.save_split(a, "silver_x", cfg, KEY, TARGET, df[TARGET], tmp_path)
+    engine = sqlalchemy.create_engine(f"sqlite:///{tmp_path / 't.db'}")
+    sp.register_split(engine, sid, path, manifest)
+    sp.register_split(engine, sid, path, manifest)
+    with engine.connect() as conn:
+        rows = conn.execute(sqlalchemy.text("SELECT split_id, n_holdout FROM splits")).all()
+    assert rows == [(sid, 200)]

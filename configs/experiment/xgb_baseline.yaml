@@ -1,5 +1,5 @@
 # Baseline: Silver feature-role columns only, no engineering.
-schema_version: 1
+schema_version: 2
 experiment_name: xgb_baseline
 seed: 42  # model seed; vary this for repeat runs, the split stays fixed
 
@@ -14,6 +14,10 @@ split:
   holdout_fraction: 0.2
   n_folds: 5
   seed: 42  # change only to create a new split
+
+training:
+  validation_fraction: 0.2  # of each fold's training rows, used only to stop early
+  refit_rounds_factor: 1.0  # final rounds = median best round x this
 
 metrics:
   primary: pr_auc  # a result key: pr_auc, or e.g. recall_at_5pct

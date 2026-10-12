@@ -12,8 +12,14 @@ eda:
 	$(RUN) -m $(PKG).scripts.eda_script --dataset-version-id $(DS)
 silver:
 	$(RUN) -m $(PKG).data.silver --dataset-version-id $(DS)
+train:
+	$(RUN) -m $(PKG).training.train_model --config configs/experiment/xgb_baseline.yaml
+sweep:
+	$(RUN) -m $(PKG).training.train_model --sweep configs/sweep/xgb_grid.yaml
+evaluate:
+	$(RUN) -m $(PKG).evaluation.evaluate_run --run-id $(RUN_ID)
 
-pipeline: ingest eda silver
+pipeline: ingest eda silver split train
 rebuild: clean pipeline
 
 clean:
@@ -22,3 +28,4 @@ clean:
 
 check:
 	uv run ruff check && uv run pytest -q
+

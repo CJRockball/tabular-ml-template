@@ -58,6 +58,9 @@ notebooks/*
 artifacts/*
 !artifacts/.gitignore
 
+# Don't track Zone Identifiers
+*:Zone.Identifier
+
 # Scrap file
 /todo.txt
 # SQLite DB is derived: rebuild via the ingest entry point.

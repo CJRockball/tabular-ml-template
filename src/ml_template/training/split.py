@@ -48,9 +48,7 @@ def compute_split_id(
     return "split_" + hashlib.sha256(payload.encode()).hexdigest()[:12]
 
 
-def make_split(
-    df: pd.DataFrame, cfg: SplitConfig, key_col: str, target_col: str
-) -> pd.DataFrame:
+def make_split(df: pd.DataFrame, cfg: SplitConfig, key_col: str, target_col: str) -> pd.DataFrame:
     """Return assignments with columns [key_col, partition, fold], sorted by key."""
     for col in (key_col, target_col):
         if col not in df.columns:
@@ -179,43 +177,34 @@ def cv_folds(assignments: pd.DataFrame, key_col: str) -> list[tuple[np.ndarray, 
 
 def register_split(engine: Any, split_id: str, path: Path, manifest: dict[str, Any]) -> None:
     """Insert a row in the ``splits`` table (created if missing). Idempotent."""
-    from sqlalchemy import text
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
+    from ml_template.db.tracking_tables import ensure_tracking_tables, splits
+
+    ensure_tracking_tables(engine)
+    stmt = (
+        sqlite_insert(splits)
+        .values(
+            split_id=split_id,
+            silver_dataset_version_id=manifest["silver_dataset_version_id"],
+            path=str(path),
+            policy_json=json.dumps(manifest["policy"], sort_keys=True),
+            key_col=manifest["key_col"],
+            target_col=manifest["target_col"],
+            n_rows=manifest["n_rows"],
+            n_holdout=manifest["n_holdout"],
+            assignments_sha256=manifest["assignments_sha256"],
+            created_at=manifest["created_at"],
+        )
+        .on_conflict_do_nothing(index_elements=["split_id"])
+    )
     with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS splits ("
-                "split_id TEXT PRIMARY KEY, silver_dataset_version_id TEXT NOT NULL, "
-                "path TEXT NOT NULL, policy_json TEXT NOT NULL, key_col TEXT, "
-                "target_col TEXT, n_rows INTEGER, n_holdout INTEGER, "
-                "assignments_sha256 TEXT, created_at TEXT)"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO splits (split_id, silver_dataset_version_id, path, "
-                "policy_json, key_col, target_col, n_rows, n_holdout, assignments_sha256, "
-                "created_at) VALUES (:split_id, :silver, :path, :policy, :key, :target, "
-                ":n_rows, :n_holdout, :sha, :created)"
-            ),
-            {
-                "split_id": split_id,
-                "silver": manifest["silver_dataset_version_id"],
-                "path": str(path),
-                "policy": json.dumps(manifest["policy"], sort_keys=True),
-                "key": manifest["key_col"],
-                "target": manifest["target_col"],
-                "n_rows": manifest["n_rows"],
-                "n_holdout": manifest["n_holdout"],
-                "sha": manifest["assignments_sha256"],
-                "created": manifest["created_at"],
-            },
-        )
+        conn.execute(stmt)
 
 
 def main(argv: list[str] | None = None) -> None:
     from ml_template.db.connection import get_engine
-    from ml_template.tracking.utils import setup_logging
+    from ml_template.tracking.pipeline_logging import setup_logging
 
     p = argparse.ArgumentParser(description="Create the holdout and CV split for a Silver version.")
     p.add_argument("--config", default="configs/experiment/xgb_baseline.yaml", type=Path)

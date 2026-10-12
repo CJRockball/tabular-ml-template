@@ -21,7 +21,7 @@ import itertools
 import json
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -29,7 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ml_template.evaluation.metrics import resolved_keys
 from ml_template.paths import ROOT
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_SWEEP_RUNS = 200
 
 
@@ -53,6 +53,15 @@ class SplitConfig(_Strict):
     seed: int = 42  # keep fixed across model seeds so runs share one split
 
 
+class TrainingConfig(_Strict):
+    """Trainer settings that are not model parameters."""
+
+    # Share of each fold's training rows held back to decide when to stop.
+    validation_fraction: float = Field(0.2, gt=0, lt=0.5)
+    # Final rounds = median best round across folds x this factor.
+    refit_rounds_factor: float = Field(1.0, ge=0.5, le=2.0)
+
+
 class MetricsConfig(_Strict):
     primary: str = "pr_auc"  # a result key, e.g. "pr_auc" or "recall_at_5pct"
     names: list[str] = Field(default_factory=lambda: ["pr_auc", "recall_at_alert_rate"])
@@ -68,7 +77,9 @@ class MetricsConfig(_Strict):
 
 class XGBParams(_Strict):
     objective: Literal["binary:logistic"] = "binary:logistic"
-    n_estimators: int = Field(300, ge=1)
+    eval_metric: Literal["aucpr", "logloss"] = "aucpr"  # watched by early stopping
+    n_estimators: int = Field(2000, ge=1)  # a cap; early stopping picks the real count
+    early_stopping_rounds: int = Field(50, ge=1)
     max_depth: int = Field(4, ge=1)
     learning_rate: float = Field(0.05, gt=0)
     subsample: float = Field(0.8, gt=0, le=1)
@@ -77,8 +88,9 @@ class XGBParams(_Strict):
     reg_lambda: float = Field(1.0, ge=0)
     reg_alpha: float = Field(0.0, ge=0)
     max_bin: int = Field(256, ge=2)
-    scale_pos_weight: float | None = Field(None, gt=0)
-    early_stopping_rounds: int | None = Field(None, ge=1)
+    # "auto" = negatives / positives of the rows being fitted.
+    scale_pos_weight: Annotated[float, Field(gt=0)] | Literal["auto"] = "auto"
+    device: Literal["cpu", "cuda"] = "cpu"
 
 
 class XGBModelConfig(_Strict):
@@ -87,11 +99,12 @@ class XGBModelConfig(_Strict):
 
 
 class RunConfig(_Strict):
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     experiment_name: str
     seed: int = 42  # model seed; the split has its own
     data: DataConfig
     split: SplitConfig = Field(default_factory=SplitConfig)
+    training: TrainingConfig = Field(default_factory=TrainingConfig)
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
     # Add further model types here later as a discriminated union on ``type``.
     model: XGBModelConfig = Field(default_factory=XGBModelConfig)

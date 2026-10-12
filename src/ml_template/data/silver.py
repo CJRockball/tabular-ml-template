@@ -19,8 +19,9 @@ import pandas as pd
 import yaml
 
 from ml_template.data.extract import extract_bronze
-from ml_template.db import registry
+from ml_template.db import data_run_registry
 from ml_template.db.connection import get_engine
+from ml_template.tracking.pipeline_logging import setup_logging
 
 logger = logging.getLogger("ml_template.scripts.silver")
 
@@ -216,9 +217,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--artifact-root", default="artifacts/quality")
     args = p.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-    )
+    setup_logging()
+    logger.info("Start silver process")
+
     config_path = Path(args.config)
     config = yaml.safe_load(config_path.read_text())
 
@@ -243,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest = {}
     if exit_code == 0:
         manifest = json.loads((out_dir / "manifest.json").read_text())
-    registry.register_silver_build(
+    data_run_registry.register_silver_build(
         get_engine(),
         silver_dataset_version_id=version,
         dataset_version_id=args.dataset_version_id,
@@ -256,6 +257,8 @@ def main(argv: list[str] | None = None) -> int:
         parquet_sha256=manifest.get("parquet_sha256"),
         error_summary=None if exit_code == 0 else "validation gates failed",
     )
+
+    logger.info("Silver dataset done")
     return exit_code
 
 

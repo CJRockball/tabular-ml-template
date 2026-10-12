@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import create_engine, select
 
-from ml_template.db import registry
+from ml_template.db import data_run_registry
 
 
 @pytest.fixture
@@ -12,7 +12,7 @@ def engine(tmp_path):
 
 
 def _silver(engine, version, bronze="ds_v1", ok=True):
-    registry.register_silver_build(
+    data_run_registry.register_silver_build(
         engine,
         silver_dataset_version_id=version,
         dataset_version_id=bronze,
@@ -27,39 +27,41 @@ def _silver(engine, version, bronze="ds_v1", ok=True):
 def test_latest_valid_silver_ignores_failed_builds(engine):
     _silver(engine, "silver_a", ok=True)
     _silver(engine, "silver_b", ok=False)
-    latest = registry.latest_valid_silver(engine, "ds_v1")
+    latest = data_run_registry.latest_valid_silver(engine, "ds_v1")
     assert latest is not None
     assert latest["silver_dataset_version_id"] == "silver_a"
     assert latest["row_count"] == 10_000
 
 
 def test_latest_valid_silver_none_when_empty(engine):
-    assert registry.latest_valid_silver(engine, "ds_v1") is None
+    assert data_run_registry.latest_valid_silver(engine, "ds_v1") is None
 
 
 def test_failed_build_can_be_retried_with_same_id(engine):
     _silver(engine, "silver_a", ok=False)
     _silver(engine, "silver_a", ok=True)
     with engine.connect() as conn:
-        rows = conn.execute(select(registry.silver_datasets)).mappings().all()
+        rows = conn.execute(select(data_run_registry.silver_datasets)).mappings().all()
     assert len(rows) == 1
     assert rows[0]["status"] == "succeeded"
 
 
 def test_eda_run_lifecycle(engine):
-    run_id = registry.start_eda_run(engine, "ds_v1", config_sha256="abc")
-    registry.finish_eda_run(engine, run_id, succeeded=True, row_count=27, report_path="r.json")
+    run_id = data_run_registry.start_eda_run(engine, "ds_v1", config_sha256="abc")
+    data_run_registry.finish_eda_run(
+        engine, run_id, succeeded=True, row_count=27, report_path="r.json"
+    )
     with engine.connect() as conn:
-        row = conn.execute(select(registry.eda_runs)).mappings().one()
+        row = conn.execute(select(data_run_registry.eda_runs)).mappings().one()
     assert row["status"] == "succeeded"
     assert row["row_count"] == 27
     assert row["finished_at"] is not None
 
 
 def test_eda_run_failure_is_recorded(engine):
-    run_id = registry.start_eda_run(engine, "ds_v1")
-    registry.finish_eda_run(engine, run_id, succeeded=False, error_summary="boom")
+    run_id = data_run_registry.start_eda_run(engine, "ds_v1")
+    data_run_registry.finish_eda_run(engine, run_id, succeeded=False, error_summary="boom")
     with engine.connect() as conn:
-        row = conn.execute(select(registry.eda_runs)).mappings().one()
+        row = conn.execute(select(data_run_registry.eda_runs)).mappings().one()
     assert row["status"] == "failed"
     assert row["error_summary"] == "boom"

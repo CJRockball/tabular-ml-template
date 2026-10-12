@@ -28,9 +28,10 @@ from ml_template.data.inspect_bronze import (
     validate_bronze_contract,
 )
 from ml_template.data.schema import Status
+from ml_template.db.bronze_tables import setup_db
 from ml_template.db.connection import get_engine
-from ml_template.db.tables import setup_db
-from ml_template.tracking.utils import git_sha, setup_logging
+from ml_template.tracking.git_state import git_sha
+from ml_template.tracking.pipeline_logging import setup_logging
 
 logger = logging.getLogger("ml_template.data.ingest")
 

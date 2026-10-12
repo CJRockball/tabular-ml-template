@@ -1,0 +1,111 @@
+"""XGBoost binary classifier behind the model-adapter interface.
+
+Needs xgboost >= 2.0 (``device`` argument, early stopping in the constructor).
+Categorical columns use XGBoost's native support, which needs no fitted encoder.
+Rounds are 1-based: ``best_round`` is the number of trees to keep.
+
+Saving and loading go through the native booster, not the scikit-learn wrapper.
+The wrapper's ``save_model`` reads ``_estimator_type``, which newer scikit-learn
+releases no longer define, so it fails on some xgboost/scikit-learn pairings.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from xgboost import XGBClassifier
+
+from ml_template.training.run_config import XGBParams
+
+
+def resolve_scale_pos_weight(value: float | str, y: pd.Series) -> float:
+    """'auto' means negatives over positives in the rows being fitted."""
+    if value == "auto":
+        positives = int(y.sum())
+        if positives == 0:
+            raise ValueError("cannot compute scale_pos_weight: no positives in training rows")
+        return (len(y) - positives) / positives
+    return float(value)
+
+
+class XGBAdapter:
+    def __init__(self, params: XGBParams, seed: int) -> None:
+        self.params = params
+        self.seed = seed
+        self.max_rounds = params.n_estimators
+        self.model: XGBClassifier | None = None  # set after fitting
+        self._loaded_booster: xgb.Booster | None = None  # set after load()
+
+    def _build(
+        self, y: pd.Series, n_estimators: int, early_stopping_rounds: int | None
+    ) -> XGBClassifier:
+        p = self.params
+        return XGBClassifier(
+            objective=p.objective,
+            eval_metric=p.eval_metric,
+            n_estimators=n_estimators,
+            early_stopping_rounds=early_stopping_rounds,
+            max_depth=p.max_depth,
+            learning_rate=p.learning_rate,
+            subsample=p.subsample,
+            colsample_bytree=p.colsample_bytree,
+            min_child_weight=p.min_child_weight,
+            reg_lambda=p.reg_lambda,
+            reg_alpha=p.reg_alpha,
+            max_bin=p.max_bin,
+            scale_pos_weight=resolve_scale_pos_weight(p.scale_pos_weight, y),
+            device=p.device,
+            tree_method="hist",
+            enable_categorical=True,
+            random_state=self.seed,
+            verbosity=0,
+        )
+
+    def _booster(self) -> xgb.Booster:
+        if self.model is not None:
+            return self.model.get_booster()
+        if self._loaded_booster is not None:
+            return self._loaded_booster
+        raise RuntimeError("model is not fitted")
+
+    def fit_with_validation(
+        self, X_train: pd.DataFrame, y_train: pd.Series, X_val: pd.DataFrame, y_val: pd.Series
+    ) -> int:
+        """Fit with early stopping on the validation slice. Returns the best round count."""
+        model = self._build(y_train, self.max_rounds, self.params.early_stopping_rounds)
+        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+        self.model, self._loaded_booster = model, None
+        return int(model.best_iteration) + 1
+
+    def refit(self, X: pd.DataFrame, y: pd.Series, n_rounds: int) -> None:
+        """Fit a fixed number of rounds with no early stopping."""
+        model = self._build(y, int(n_rounds), None)
+        model.fit(X, y, verbose=False)
+        self.model, self._loaded_booster = model, None
+
+    def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
+        """Probability of the positive class."""
+        if self.model is not None:
+            return self.model.predict_proba(X)[:, 1]
+        booster = self._booster()
+        return booster.predict(xgb.DMatrix(X, enable_categorical=True))
+
+    def feature_importances(self) -> dict[str, float]:
+        """Total gain per feature. Features the model never split on get 0."""
+        booster = self._booster()
+        scores = booster.get_score(importance_type="gain")
+        return {name: float(scores.get(name, 0.0)) for name in booster.feature_names}
+
+    def save(self, path: Path) -> None:
+        self._booster().save_model(str(path))
+
+    @classmethod
+    def load(cls, params: XGBParams, seed: int, path: Path) -> XGBAdapter:
+        adapter = cls(params, seed)
+        booster = xgb.Booster()
+        booster.load_model(str(path))
+        adapter._loaded_booster = booster
+        return adapter

@@ -1,5 +1,8 @@
 """Read the dataset contract (e.g. configs/ai4i_binary.yaml) in canonical names.
 
+Sources: ``data`` (entity_id, target), ``roles`` (under ``bronze_source_contract``
+or at top level) and ``silver_eda_contract`` (canonical names and dtypes).
+
 Training code asks this module which column is the key, the target, a feature or
 an outcome. Nothing downstream hardcodes ``udi`` or ``machine_failure``.
 """
@@ -28,6 +31,14 @@ class DatasetContract:
         return (*self.ids, self.target, *self.outcomes)
 
 
+def _find_roles(raw: dict[str, Any]) -> dict[str, Any]:
+    """Roles sit under ``bronze_source_contract`` (as ingest reads them) or at top level."""
+    for section in (raw.get("bronze_source_contract") or {}, raw):
+        if isinstance(section, dict) and isinstance(section.get("roles"), dict):
+            return section["roles"]
+    raise KeyError("roles")
+
+
 def _role(roles: dict[str, Any], *keys: str) -> list[str]:
     for key in keys:
         if key in roles:
@@ -42,7 +53,7 @@ def load_dataset_contract(path: str | Path) -> DatasetContract:
     try:
         names: dict[str, str] = raw["silver_eda_contract"]["canonical_names"]
         dtypes: dict[str, str] = raw["silver_eda_contract"].get("canonical_dtypes", {})
-        roles: dict[str, Any] = raw["roles"]
+        roles: dict[str, Any] = _find_roles(raw)
         entity_raw: str = raw["data"]["entity_id"]
         target_raw: str = raw["data"]["target"]
     except KeyError as exc:
