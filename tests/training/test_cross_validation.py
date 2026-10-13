@@ -3,11 +3,13 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import LogisticRegression
 
+from ml_template.evaluation.metrics import with_standard
 from ml_template.training import cross_validation as cv
 from ml_template.training.run_config import SplitConfig
 from ml_template.training.split import make_split
 
 KEY, TARGET = "udi", "machine_failure"
+NAMES, RATES = with_standard([], [])
 
 
 class FakeAdapter:
@@ -58,8 +60,8 @@ def _run(data, **kw):
         KEY,
         validation_fraction=0.2,
         seed=1,
-        metric_names=["pr_auc", "recall_at_alert_rate"],
-        alert_rates=[0.05],
+        metric_names=NAMES,
+        alert_rates=RATES,
         **kw,
     )
 
@@ -93,6 +95,17 @@ def test_validation_fold_is_not_used_for_early_stopping(data):
         assert not set(stop_fit) & set(stop_val)
 
 
+def test_fold_models_are_the_ones_that_predicted_each_fold(data):
+    res = _run(data)
+    assert sorted(res.fold_models) == sorted(res.fold_val_keys) == list(res.folds["fold"])
+    assert len({id(m) for m in res.fold_models.values()}) == len(res.fold_models)
+    for fold, keys in res.fold_val_keys.items():
+        assert set(keys) == set(res.oof.loc[res.oof["fold"] == fold, KEY])
+        X = data[0]
+        p = res.fold_models[fold].predict_proba(X.loc[keys])
+        np.testing.assert_allclose(p, res.oof.set_index(KEY).loc[keys, "p_oof"].to_numpy())
+
+
 def test_metric_rows_and_final_rounds(data):
     res = _run(data)
     keys = {(r["split"], r["fold"], r["metric"]) for r in res.metric_rows}
@@ -105,6 +118,29 @@ def test_metric_rows_and_final_rounds(data):
     assert ("cv", -1, "n_rounds_final") in {
         (r["split"], r["fold"], r["metric"]) for r in scaled.metric_rows
     }
+
+
+def test_standard_set_stability_and_label_summary_rows(data):
+    X, y, assign = data
+    res = _run(data)
+    metrics = {(r["fold"], r["metric"]): r["value"] for r in res.metric_rows}
+    for name in (
+        "pr_auc",
+        "roc_auc",
+        "brier",
+        "recall_at_5pct",
+        "recall_at_10pct",
+        "precision_at_5pct",
+        "precision_at_10pct",
+    ):
+        assert (-1, name) in metrics, name
+    per_fold = [metrics[(int(f), "pr_auc")] for f in res.folds["fold"]]
+    assert metrics[(-1, "pr_auc__fold_mean")] == pytest.approx(np.mean(per_fold))
+    assert metrics[(-1, "pr_auc__fold_std")] == pytest.approx(np.std(per_fold, ddof=1))
+    dev_keys = assign.loc[assign["partition"] == "dev", KEY]
+    assert metrics[(-1, "n_rows")] == len(dev_keys)
+    assert metrics[(-1, "base_rate")] == pytest.approx(y.loc[dev_keys].mean())
+    assert metrics[(-1, "n_positives")] == y.loc[dev_keys].sum()
 
 
 def test_deterministic(data):
@@ -124,27 +160,8 @@ def test_fit_final_uses_dev_rows_only(data):
 
 def test_misaligned_inputs_rejected(data):
     X, y, assign = data
+    common = {"validation_fraction": 0.2, "seed": 1, "metric_names": NAMES, "alert_rates": RATES}
     with pytest.raises(ValueError, match="different rows"):
-        cv.cross_validate(
-            FakeAdapter,
-            X.iloc[:-5],
-            y.iloc[:-5],
-            assign,
-            KEY,
-            validation_fraction=0.2,
-            seed=1,
-            metric_names=["pr_auc"],
-            alert_rates=[],
-        )
+        cv.cross_validate(FakeAdapter, X.iloc[:-5], y.iloc[:-5], assign, KEY, **common)
     with pytest.raises(ValueError, match="same index"):
-        cv.cross_validate(
-            FakeAdapter,
-            X,
-            y.reset_index(drop=True),
-            assign,
-            KEY,
-            validation_fraction=0.2,
-            seed=1,
-            metric_names=["pr_auc"],
-            alert_rates=[],
-        )
+        cv.cross_validate(FakeAdapter, X, y.reset_index(drop=True), assign, KEY, **common)

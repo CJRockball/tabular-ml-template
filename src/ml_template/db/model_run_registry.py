@@ -21,6 +21,7 @@ from ml_template.db.tracking_tables import (
     ensure_tracking_tables,
     experiment_launches,
     model_runs,
+    run_feature_importance,
     run_metrics,
     run_params,
 )
@@ -170,6 +171,35 @@ def log_metrics(engine: Engine, run_id: str, rows: list[dict[str, Any]]) -> None
         conn.execute(insert(run_metrics), clean)
 
 
+def log_feature_importance(engine: Engine, run_id: str, rows: list[dict[str, Any]]) -> None:
+    """Store importance rows. Rows for the same run, split and method are replaced."""
+    if not rows:
+        return
+    clean = [
+        {
+            "run_id": run_id,
+            "split": r["split"],
+            "fold": int(r["fold"]),
+            "method": r["method"],
+            "feature": r["feature"],
+            "value": _clean_float(r["value"]),
+            "std": _clean_float(r.get("std")),
+        }
+        for r in rows
+    ]
+    keys = {(r["split"], r["method"]) for r in clean}
+    with engine.begin() as conn:
+        for split, method in keys:
+            conn.execute(
+                delete(run_feature_importance).where(
+                    run_feature_importance.c.run_id == run_id,
+                    run_feature_importance.c.split == split,
+                    run_feature_importance.c.method == method,
+                )
+            )
+        conn.execute(insert(run_feature_importance), clean)
+
+
 def finish_model_run(
     engine: Engine,
     run_id: str,
@@ -178,6 +208,9 @@ def finish_model_run(
     primary_metric: str | None = None,
     primary_value: float | None = None,
     n_rounds_final: int | None = None,
+    n_rows: int | None = None,
+    n_features: int | None = None,
+    duration_s: float | None = None,
     error_summary: str | None = None,
 ) -> None:
     with engine.begin() as conn:
@@ -190,6 +223,9 @@ def finish_model_run(
                 primary_metric=primary_metric,
                 primary_value=_clean_float(primary_value),
                 n_rounds_final=n_rounds_final,
+                n_rows=n_rows,
+                n_features=n_features,
+                duration_s=_clean_float(duration_s),
                 error_summary=error_summary,
             )
         )
@@ -241,6 +277,24 @@ def get_metrics(engine: Engine, run_id: str, split: str | None = None) -> list[d
     if split is not None:
         stmt = stmt.where(run_metrics.c.split == split)
     stmt = stmt.order_by(run_metrics.c.split, run_metrics.c.fold, run_metrics.c.metric)
+    with engine.connect() as conn:
+        return [dict(r) for r in conn.execute(stmt).mappings()]
+
+
+def get_feature_importance(
+    engine: Engine, run_id: str, *, split: str | None = None, method: str | None = None
+) -> list[dict[str, Any]]:
+    ensure_tables(engine)
+    stmt = select(run_feature_importance).where(run_feature_importance.c.run_id == run_id)
+    if split is not None:
+        stmt = stmt.where(run_feature_importance.c.split == split)
+    if method is not None:
+        stmt = stmt.where(run_feature_importance.c.method == method)
+    stmt = stmt.order_by(
+        run_feature_importance.c.method,
+        run_feature_importance.c.fold,
+        run_feature_importance.c.feature,
+    )
     with engine.connect() as conn:
         return [dict(r) for r in conn.execute(stmt).mappings()]
 

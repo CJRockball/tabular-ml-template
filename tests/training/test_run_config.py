@@ -29,6 +29,23 @@ def test_load_defaults_and_override(tmp_path):
     p = cfg.model.params
     assert (p.early_stopping_rounds, p.scale_pos_weight, p.device) == (50, "auto", "cpu")
     assert cfg.training.validation_fraction == 0.2
+    assert cfg.analysis.permutation_importance and cfg.analysis.permutation_repeats == 10
+
+
+def test_standard_metrics_are_always_present(tmp_path):
+    exp = _write(tmp_path)
+    cfg = rc.load_config(exp)
+    assert cfg.metrics.names[:5] == [
+        "pr_auc",
+        "roc_auc",
+        "brier",
+        "recall_at_alert_rate",
+        "precision_at_alert_rate",
+    ]
+    assert cfg.metrics.alert_rates == [0.05, 0.10]
+    custom = rc.load_config(exp, ["metrics.names=[roc_auc]", "metrics.alert_rates=[0.01]"])
+    assert "pr_auc" in custom.metrics.names  # cannot be removed
+    assert custom.metrics.alert_rates == [0.01, 0.05, 0.10]  # extras are added
 
 
 def test_scale_pos_weight_accepts_auto_or_positive_number(tmp_path):
@@ -37,10 +54,8 @@ def test_scale_pos_weight_accepts_auto_or_positive_number(tmp_path):
         rc.load_config(exp, ["model.params.scale_pos_weight=10"]).model.params.scale_pos_weight
         == 10
     )
-    assert (
-        rc.load_config(exp, ["model.params.scale_pos_weight=auto"]).model.params.scale_pos_weight
-        == "auto"
-    )
+    auto = rc.load_config(exp, ["model.params.scale_pos_weight=auto"])
+    assert auto.model.params.scale_pos_weight == "auto"
     for bad in ("0", "-1", "none"):
         with pytest.raises(ValidationError):
             rc.load_config(exp, [f"model.params.scale_pos_weight={bad}"])
@@ -59,9 +74,13 @@ def test_invalid_values_rejected(tmp_path):
         "training.validation_fraction=0",
         "training.refit_rounds_factor=5",
         "experiment_name=bad name",
-        "metrics.primary=brier",  # not in names
+        "metrics.primary=f1",  # not a known result key
+        "metrics.names=[nope]",
         "metrics.alert_rates=[0, 0.1]",
         "split.holdout_fraction=1.5",
+        "analysis.permutation_repeats=0",
+        "analysis.error_sample_size=-1",
+        "analysis.unknown=1",
         "schema_version=1",
     ):
         with pytest.raises(ValidationError):
@@ -78,19 +97,24 @@ def test_override_syntax_error(tmp_path):
         rc.load_config(_write(tmp_path), ["seed"])
 
 
-def test_hash_stable_and_sensitive(tmp_path):
+def test_hash_stable_sensitive_and_ignores_analysis(tmp_path):
     exp = _write(tmp_path)
     a, b = rc.load_config(exp), rc.load_config(exp)
     c = rc.load_config(exp, ["training.validation_fraction=0.25"])
-    assert rc.config_hash(a) == rc.config_hash(b) != rc.config_hash(c)
+    d = rc.load_config(exp, ["analysis.permutation_repeats=3", "analysis.error_sample_size=0"])
+    e = rc.load_config(exp, ["metrics.alert_rates=[0.01]"])
+    assert rc.config_hash(a) == rc.config_hash(b) == rc.config_hash(d)
+    assert rc.config_hash(a) != rc.config_hash(c)
+    assert rc.config_hash(a) != rc.config_hash(e)  # extra metrics do change the config
 
 
 def test_flatten_params(tmp_path):
     flat = rc.flatten_params(rc.load_config(_write(tmp_path)))
     assert flat["model.params.max_depth"] == "4"
     assert flat["model.params.scale_pos_weight"] == "auto"
-    assert flat["metrics.alert_rates"] == "[0.05]"
+    assert flat["metrics.alert_rates"] == "[0.05, 0.1]"
     assert flat["training.refit_rounds_factor"] == "1.0"
+    assert flat["analysis.permutation_repeats"] == "10"
 
 
 def test_expand_sweep(tmp_path):
@@ -136,6 +160,7 @@ def test_repository_configs_are_valid():
     cfg = rc.load_config(CONFIGS / "experiment" / "xgb_baseline.yaml")
     assert cfg.model.params.eval_metric == "aucpr"
     assert cfg.model.params.n_estimators == 2000
+    assert cfg.analysis.error_sample_size == 25
     assert len(rc.expand_sweep(CONFIGS / "sweep" / "xgb_grid.yaml")) == 12
 
 

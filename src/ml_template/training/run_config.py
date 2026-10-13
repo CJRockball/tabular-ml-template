@@ -2,7 +2,11 @@
 
 One ``RunConfig`` describes one model run: parameters and data references only.
 Launch identity (``experiment_run_id``) and ``run_id`` are assigned by the runner,
-so they never change the config hash.
+so they never change the config hash. The ``analysis`` section is also left out of
+the hash, because it changes what is reported, not the model.
+
+Metrics: the standard set (see ``evaluation.metrics``) is always computed. The
+``names`` and ``alert_rates`` fields only add extras; they cannot remove anything.
 
 Relative paths inside configs (``model_file``, sweep ``base``, ``dataset_config``)
 resolve against the current directory first, then the repository root.
@@ -26,11 +30,12 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ml_template.evaluation.metrics import resolved_keys
+from ml_template.evaluation.metrics import resolved_keys, with_standard
 from ml_template.paths import ROOT
 
 SCHEMA_VERSION = 2
 MAX_SWEEP_RUNS = 200
+HASH_EXCLUDED_SECTIONS = {"analysis"}
 
 
 class _Strict(BaseModel):
@@ -64,8 +69,16 @@ class TrainingConfig(_Strict):
 
 class MetricsConfig(_Strict):
     primary: str = "pr_auc"  # a result key, e.g. "pr_auc" or "recall_at_5pct"
-    names: list[str] = Field(default_factory=lambda: ["pr_auc", "recall_at_alert_rate"])
-    alert_rates: list[float] = Field(default_factory=lambda: [0.05])
+    names: list[str] = Field(default_factory=list)  # extras; standard metrics always run
+    alert_rates: list[float] = Field(default_factory=list)  # extras; 5% and 10% always run
+
+    @model_validator(mode="before")
+    @classmethod
+    def _add_standard(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            names, rates = with_standard(data.get("names"), data.get("alert_rates"))
+            data = {**data, "names": names, "alert_rates": rates}
+        return data
 
     @model_validator(mode="after")
     def _check(self) -> MetricsConfig:
@@ -73,6 +86,15 @@ class MetricsConfig(_Strict):
         if self.primary not in keys:
             raise ValueError(f"primary {self.primary!r} is not one of {keys}")
         return self
+
+
+class AnalysisConfig(_Strict):
+    """Standard per-run analyses. Excluded from the config hash."""
+
+    permutation_importance: bool = True
+    permutation_repeats: int = Field(10, ge=1)
+    permutation_max_rows: int = Field(50_000, ge=100)  # validation rows used per fold
+    error_sample_size: int = Field(25, ge=0)  # rows per kind in error_sample.csv; 0 = off
 
 
 class XGBParams(_Strict):
@@ -106,6 +128,7 @@ class RunConfig(_Strict):
     split: SplitConfig = Field(default_factory=SplitConfig)
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     # Add further model types here later as a discriminated union on ``type``.
     model: XGBModelConfig = Field(default_factory=XGBModelConfig)
 
@@ -228,7 +251,9 @@ def config_json(cfg: RunConfig) -> str:
 
 
 def config_hash(cfg: RunConfig) -> str:
-    canonical = json.dumps(cfg.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    """Identity of what the run trains. Reporting-only sections are left out."""
+    payload = cfg.model_dump(mode="json", exclude=HASH_EXCLUDED_SECTIONS)
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 
 

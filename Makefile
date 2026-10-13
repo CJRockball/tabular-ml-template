@@ -14,8 +14,10 @@ silver:
 	$(RUN) -m $(PKG).data.silver --dataset-version-id $(DS)
 train:
 	$(RUN) -m $(PKG).training.train_model --config configs/experiment/xgb_baseline.yaml
+
+SWEEP ?= configs/sweep/xgb_grid.yaml
 sweep:
-	$(RUN) -m $(PKG).training.train_model --sweep configs/sweep/xgb_grid.yaml
+	$(RUN) -m $(PKG).training.train_model --sweep $(SWEEP)
 evaluate:
 	$(RUN) -m $(PKG).evaluation.evaluate_run --run-id $(RUN_ID)
 

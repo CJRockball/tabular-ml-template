@@ -5,6 +5,7 @@
 Each run is evaluated once. A second call returns the stored metrics. ``--force``
 re-evaluates and replaces them. ``model_runs.holdout_evaluated_at`` records the
 first look, so the number of holdout evaluations per experiment can be counted.
+The same standard metrics as in training are computed, plus the holdout base rate.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ import pandas as pd
 from sqlalchemy import Engine
 
 from ml_template.db import model_run_registry as registry
-from ml_template.evaluation.metrics import long_form_metrics
+from ml_template.evaluation.metrics import label_summary_rows, long_form_metrics
 from ml_template.models.model_factory import ModelAdapter, load_adapter
 from ml_template.paths import DATA_SILVER, DATA_SPLITS
 from ml_template.tracking import run_artifacts
@@ -66,6 +67,7 @@ def evaluate_holdout(
     rows = long_form_metrics(
         y_hold, p_hold, cfg.metrics.names, cfg.metrics.alert_rates, split="holdout"
     )
+    rows += label_summary_rows(y_hold, split="holdout")
     pd.DataFrame({key_col: hold_keys, "y_true": y_hold, "p_hold": p_hold}).to_parquet(
         run_dir / "holdout_predictions.parquet", index=False
     )

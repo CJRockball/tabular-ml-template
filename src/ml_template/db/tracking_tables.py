@@ -1,4 +1,4 @@
-"""Tables for splits, experiment launches, model runs, parameters and metrics.
+"""Tables for splits, experiment launches, model runs, parameters, metrics and importance.
 
 Files stay the source of truth for models and predictions. These rows index them
 and carry what a dashboard needs to compare runs. Timestamps are ISO UTC strings,
@@ -8,6 +8,9 @@ Identity:
     experiment_name    human label for a question, reused across launches
     experiment_run_id  one launch of that experiment (a single run or a whole sweep)
     run_id             one model fit
+
+``ensure_tracking_tables`` also adds any nullable column that a newer version of
+this file declares but an existing database lacks, so older databases keep working.
 """
 
 from __future__ import annotations
@@ -22,6 +25,8 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    inspect,
+    text,
 )
 
 STATUS_RUNNING = "running"
@@ -88,6 +93,9 @@ model_runs = Table(
     Column("primary_metric", String),
     Column("primary_value", Float),
     Column("n_rounds_final", Integer),
+    Column("n_rows", Integer),  # rows the model saw (development + holdout)
+    Column("n_features", Integer),
+    Column("duration_s", Float),  # wall-clock seconds for the whole run
     Column("artifact_dir", String),
     Column("holdout_evaluated_at", String),
     Column("error_summary", Text),
@@ -111,6 +119,37 @@ run_metrics = Table(
     Column("value", Float),  # NULL when undefined
 )
 
+run_feature_importance = Table(
+    "run_feature_importance",
+    tracking_metadata,
+    Column("run_id", String, ForeignKey("model_runs.run_id"), primary_key=True),
+    Column("split", String, primary_key=True),
+    Column("fold", Integer, primary_key=True),  # -1 = mean over folds
+    Column("method", String, primary_key=True),
+    Column("feature", String, primary_key=True),
+    Column("value", Float),
+    Column("std", Float),  # per fold: across repeats; at -1: across folds
+)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    inspector = inspect(engine)
+    for table in tracking_metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {c["name"] for c in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            if column.primary_key or not column.nullable:
+                raise RuntimeError(
+                    f"{table.name}.{column.name} is new and required; rebuild the database"
+                )
+            ddl_type = column.type.compile(dialect=engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {ddl_type}"))
+
 
 def ensure_tracking_tables(engine: Engine) -> None:
     tracking_metadata.create_all(engine, checkfirst=True)
+    _add_missing_columns(engine)

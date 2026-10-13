@@ -5,6 +5,9 @@ and never sees the validation fold. The model is then refitted on all of the
 fold's training rows for the chosen number of rounds and predicts the validation
 fold. This is the same procedure used for the final model, so the CV score
 estimates what the final model will do. The holdout is never touched here.
+
+The refitted fold models are returned with the result, so they can be saved and
+analysed (for example permutation importance) on rows they never saw.
 """
 
 from __future__ import annotations
@@ -17,7 +20,12 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-from ml_template.evaluation.metrics import long_form_metrics
+from ml_template.evaluation.metrics import (
+    fold_stability_rows,
+    label_summary_rows,
+    long_form_metrics,
+    resolved_keys,
+)
 from ml_template.models.model_factory import AdapterFactory, ModelAdapter
 
 logger = logging.getLogger("ml_template.training.cross_validation")
@@ -29,6 +37,8 @@ class CVResult:
     folds: pd.DataFrame  # one row per fold: sizes, best_round, hit_cap
     metric_rows: list[dict[str, Any]]  # shaped for run_metrics
     n_rounds_final: int
+    fold_models: dict[int, ModelAdapter]  # the model that predicted each fold
+    fold_val_keys: dict[int, np.ndarray]  # that fold's validation keys
 
 
 def _check_alignment(
@@ -76,6 +86,8 @@ def cross_validate(
 
     oof_parts: list[pd.DataFrame] = []
     fold_rows: list[dict[str, Any]] = []
+    fold_models: dict[int, ModelAdapter] = {}
+    fold_val_keys: dict[int, np.ndarray] = {}
     for k in fold_ids:
         val_keys = dev.loc[dev["fold"] == k, key_col].to_numpy()
         train_keys = dev.loc[dev["fold"] != k, key_col].to_numpy()
@@ -99,6 +111,8 @@ def cross_validate(
         fitter.refit(X.loc[train_keys], y.loc[train_keys], best_round)
         p = fitter.predict_proba(X.loc[val_keys])
         oof_parts.append(pd.DataFrame({key_col: val_keys, "fold": k, "p_oof": p}))
+        fold_models[k] = fitter
+        fold_val_keys[k] = val_keys
         fold_rows.append(
             {
                 "fold": k,
@@ -123,6 +137,8 @@ def cross_validate(
         split="cv",
         folds=oof["fold"].to_numpy(),
     )
+    rows += fold_stability_rows(rows, resolved_keys(metric_names, alert_rates))
+    rows += label_summary_rows(y_oof, split="cv")
 
     n_final = max(1, round(float(np.median(folds["best_round"])) * refit_rounds_factor))
     rows += [
@@ -130,7 +146,14 @@ def cross_validate(
         for r in folds.itertuples()
     ]
     rows.append({"split": "cv", "fold": -1, "metric": "n_rounds_final", "value": float(n_final)})
-    return CVResult(oof=oof, folds=folds, metric_rows=rows, n_rounds_final=n_final)
+    return CVResult(
+        oof=oof,
+        folds=folds,
+        metric_rows=rows,
+        n_rounds_final=n_final,
+        fold_models=fold_models,
+        fold_val_keys=fold_val_keys,
+    )
 
 
 def fit_final(

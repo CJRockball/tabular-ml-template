@@ -11,10 +11,9 @@ roles:
   id: [ID]
   feature: [A, B]
   target: [Y]
-  outcome: [F1]
 silver_eda_contract:
-  canonical_names: {ID: id, A: a, B: b, Y: y, F1: f1}
-  canonical_dtypes: {id: int64, a: float64, b: category, y: int8, f1: int8}
+  canonical_names: {ID: id, A: a, B: b, Y: y}
+  canonical_dtypes: {id: int64, a: float64, b: category, y: int8}
 """
 
 NESTED = """
@@ -27,10 +26,9 @@ bronze_source_contract:
     id: [ID]
     feature: [A, B]
     target: [Y]
-    outcome: [F1]
 silver_eda_contract:
-  canonical_names: {ID: id, A: a, B: b, Y: y, F1: f1}
-  canonical_dtypes: {id: int64, a: float64, b: category, y: int8, f1: int8}
+  canonical_names: {ID: id, A: a, B: b, Y: y}
+  canonical_dtypes: {id: int64, a: float64, b: category, y: int8}
 """
 
 
@@ -45,9 +43,14 @@ def test_contract_in_canonical_names(tmp_path, text):
     c = load_dataset_contract(_write(tmp_path, text))
     assert (c.entity_id, c.target) == ("id", "y")
     assert c.features == ("a", "b")
-    assert c.outcomes == ("f1",)
     assert c.dtypes == {"a": "float64", "b": "category"}
-    assert set(c.excluded_from_features) == {"id", "y", "f1"}
+    assert set(c.excluded_from_features) == {"id", "y"}
+
+
+def test_other_roles_are_ignored(tmp_path):
+    text = TOP.replace("  target: [Y]\n", "  target: [Y]\n  outcome: [F1, F2]\n")
+    c = load_dataset_contract(_write(tmp_path, text))  # F1, F2 have no canonical names
+    assert c.features == ("a", "b")
 
 
 def test_missing_roles_message(tmp_path):
@@ -62,7 +65,15 @@ def test_missing_canonical_name_rejected(tmp_path):
 
 def test_overlap_rejected(tmp_path):
     with pytest.raises(ValueError, match="both"):
-        load_dataset_contract(_write(tmp_path, TOP.replace("outcome: [F1]", "outcome: [F1, A]")))
+        load_dataset_contract(
+            _write(tmp_path, TOP.replace("feature: [A, B]", "feature: [A, B, Y]"))
+        )
+
+
+def test_single_target_only(tmp_path):
+    text = TOP.replace("target: [Y]", "target: [Y, A]")
+    with pytest.raises(ValueError, match="single-target"):
+        load_dataset_contract(_write(tmp_path, text))
 
 
 def test_target_mismatch_rejected(tmp_path):
@@ -74,6 +85,6 @@ def test_real_ai4i_contract():
     c = load_dataset_contract(CONFIGS / "ai4i_binary.yaml")
     assert c.entity_id == "udi"
     assert c.target == "machine_failure"
-    assert set(c.outcomes) == {"twf", "hdf", "pwf", "osf", "rnf"}
     assert "type" in c.features and len(c.features) == 6
     assert not set(c.features) & set(c.excluded_from_features)
+    assert not any(name in c.features for name in ("twf", "hdf", "pwf", "osf", "rnf"))

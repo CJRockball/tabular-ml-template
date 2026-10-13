@@ -1,6 +1,7 @@
 """Resolve a run config into model inputs: features, target and stored split.
 
-Shared by training and holdout evaluation so both see identical data.
+Shared by training and holdout evaluation so both see identical data. The model
+sees only the key, the feature columns and the single target.
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ def load_run_inputs(
     split_id = split_id_for(cfg, contract)
     assignments = load_split(split_id, split_root)
 
-    frame = silver.frame()
+    frame = silver.model_frame()
     X = prepare_features(frame[silver.features])
     y = frame[silver.target].astype(int)
     if set(assignments[contract.entity_id]) != set(frame.index):

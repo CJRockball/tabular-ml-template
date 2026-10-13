@@ -58,11 +58,15 @@ def test_launch_and_run_lifecycle(engine):
         primary_metric="pr_auc",
         primary_value=0.4,
         n_rounds_final=120,
+        n_rows=10_000,
+        n_features=6,
+        duration_s=3.2,
     )
     reg.finish_launch(engine, launch, succeeded=True)
     run = reg.get_run(engine, "run_1")
     assert run["status"] == "succeeded" and run["primary_value"] == pytest.approx(0.4)
     assert run["n_rounds_final"] == 120 and run["finished_at"]
+    assert (run["n_rows"], run["n_features"], run["duration_s"]) == (10_000, 6, pytest.approx(3.2))
     assert reg.get_params(engine, "run_1")["model.params.max_depth"] == "4"
     metrics = {(m["fold"], m["metric"]): m["value"] for m in reg.get_metrics(engine, "run_1")}
     assert metrics[(-1, "pr_auc")] == pytest.approx(0.4) and metrics[(0, "pr_auc")] is None
@@ -85,13 +89,56 @@ def test_log_metrics_replaces_same_split_only(engine):
     assert len(reg.get_metrics(engine, "run_1", split="holdout")) == 1
 
 
+def test_feature_importance_rows_are_stored_and_replaced(engine):
+    launch = reg.start_launch(engine, experiment_name="exp", kind="single", n_runs=1)
+    _start(engine, launch)
+
+    def rows(value):
+        return [
+            {
+                "split": "cv",
+                "fold": 0,
+                "method": "perm",
+                "feature": "a",
+                "value": value,
+                "std": 0.01,
+            },
+            {
+                "split": "cv",
+                "fold": -1,
+                "method": "perm",
+                "feature": "a",
+                "value": value,
+                "std": None,
+            },
+            {
+                "split": "cv",
+                "fold": -1,
+                "method": "perm",
+                "feature": "b",
+                "value": float("nan"),
+                "std": float("nan"),
+            },
+        ]
+
+    reg.log_feature_importance(engine, "run_1", rows(0.2))
+    reg.log_feature_importance(engine, "run_1", rows(0.3))  # replaces, no duplicates
+    stored = reg.get_feature_importance(engine, "run_1", split="cv", method="perm")
+    assert len(stored) == 3
+    pooled = {r["feature"]: r for r in stored if r["fold"] == -1}
+    assert pooled["a"]["value"] == pytest.approx(0.3) and pooled["a"]["std"] is None
+    assert pooled["b"]["value"] is None and pooled["b"]["std"] is None
+    assert reg.get_feature_importance(engine, "run_1", method="other") == []
+
+
 def test_failed_run_and_unknown_ids(engine):
     launch = reg.start_launch(
         engine, experiment_name="exp", kind="sweep", n_runs=2, sweep_path="s.yaml"
     )
     _start(engine, launch)
-    reg.finish_model_run(engine, "run_1", succeeded=False, error_summary="boom")
-    assert reg.get_run(engine, "run_1")["error_summary"] == "boom"
+    reg.finish_model_run(engine, "run_1", succeeded=False, duration_s=0.5, error_summary="boom")
+    failed = reg.get_run(engine, "run_1")
+    assert failed["error_summary"] == "boom" and failed["duration_s"] == pytest.approx(0.5)
     with pytest.raises(KeyError):
         reg.finish_model_run(engine, "nope", succeeded=True)
     with pytest.raises(KeyError):

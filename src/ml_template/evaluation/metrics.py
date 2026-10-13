@@ -3,6 +3,9 @@
 No database, config or file access. Called by training (CV predictions) and by
 evaluation (holdout, reruns on stored predictions).
 
+Standard set: every run computes ``STANDARD_METRICS`` at ``STANDARD_ALERT_RATES``.
+A config can add extras but cannot remove these, so any two runs are comparable.
+
 Alert-rate metrics flag the top ``ceil(rate * n)`` rows by score. Ties are broken
 by row order (stable sort), so results are deterministic.
 
@@ -26,6 +29,24 @@ METRIC_NAMES = frozenset(
     {"pr_auc", "roc_auc", "brier", "recall_at_alert_rate", "precision_at_alert_rate"}
 )
 ALERT_METRICS = frozenset({"recall_at_alert_rate", "precision_at_alert_rate"})
+
+STANDARD_METRICS = (
+    "pr_auc",
+    "roc_auc",
+    "brier",
+    "recall_at_alert_rate",
+    "precision_at_alert_rate",
+)
+STANDARD_ALERT_RATES = (0.05, 0.10)
+
+
+def with_standard(
+    names: Sequence[str] | None, alert_rates: Sequence[float] | None
+) -> tuple[list[str], list[float]]:
+    """Standard metrics and rates first, then any extras. Duplicates removed."""
+    merged_names = list(STANDARD_METRICS) + [n for n in (names or []) if n not in STANDARD_METRICS]
+    merged_rates = sorted({*STANDARD_ALERT_RATES, *(alert_rates or [])})
+    return merged_names, merged_rates
 
 
 def _prepare(y_true: Any, y_score: Any) -> tuple[np.ndarray, np.ndarray]:
@@ -179,3 +200,49 @@ def long_form_metrics(
             mask = f == fold
             add(fold, y[mask], s[mask])
     return rows
+
+
+def label_summary_rows(y_true: Any, *, split: str) -> list[dict[str, Any]]:
+    """Row count, positive count and base rate, so PR-AUC can be read as lift over random."""
+    y = np.asarray(y_true).astype(int)
+    n, positives = len(y), int(y.sum())
+    values = {"n_rows": float(n), "n_positives": float(positives), "base_rate": positives / n}
+    return [{"split": split, "fold": -1, "metric": k, "value": v} for k, v in values.items()]
+
+
+def fold_stability_rows(
+    rows: Sequence[dict[str, Any]], keys: Sequence[str], *, split: str = "cv"
+) -> list[dict[str, Any]]:
+    """Mean and sample std of each metric across folds, stored at fold -1.
+
+    Names: ``<metric>__fold_mean`` and ``<metric>__fold_std``. Needs 2+ valid folds.
+    """
+    out: list[dict[str, Any]] = []
+    for key in keys:
+        values = [
+            r["value"]
+            for r in rows
+            if r["split"] == split
+            and r["fold"] >= 0
+            and r["metric"] == key
+            and not math.isnan(r["value"])
+        ]
+        if len(values) < 2:
+            continue
+        out.append(
+            {
+                "split": split,
+                "fold": -1,
+                "metric": f"{key}__fold_mean",
+                "value": float(np.mean(values)),
+            }
+        )
+        out.append(
+            {
+                "split": split,
+                "fold": -1,
+                "metric": f"{key}__fold_std",
+                "value": float(np.std(values, ddof=1)),
+            }
+        )
+    return out

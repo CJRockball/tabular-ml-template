@@ -3,11 +3,21 @@
 Order inside one run: write the ``running`` row, do the work, write the files,
 write metrics, then set the final status. A ``succeeded`` row therefore means the
 files exist. The holdout is not touched here; ``evaluation.evaluate_run`` does that.
+
+Standard output of every run (all models, so runs stay comparable):
+    run_metrics            standard metrics per fold, fold mean and std, base rate
+    run_feature_importance permutation importance per fold, with spread across folds
+    fold_models/           the model that predicted each validation fold
+    error_sample.csv       most confident misses and false alarms with feature values
+    model_runs             duration, rows, features, rounds, git state
+An analysis that fails is logged and listed in ``analysis_errors.json``; it does not
+fail the run.
 """
 
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -15,6 +25,8 @@ from typing import Any
 from sqlalchemy import Engine
 
 from ml_template.db import model_run_registry as registry
+from ml_template.evaluation.error_sample import error_sample
+from ml_template.evaluation.permutation_importance import importance_rows_for_run
 from ml_template.models.model_factory import AdapterFactory, build_adapter_factory
 from ml_template.paths import ARTIFACTS_RUNS, DATA_SILVER, DATA_SPLITS, LOGS
 from ml_template.tracking import run_artifacts
@@ -27,6 +39,51 @@ from ml_template.training.run_inputs import load_run_inputs
 logger = logging.getLogger("ml_template.training.experiment_runner")
 
 FactoryBuilder = Callable[[RunConfig], AdapterFactory]
+
+
+def _run_analyses(
+    cfg: RunConfig, engine: Engine, run_id: str, run_dir: Path, inputs: Any, cv: Any
+) -> None:
+    """Standard analyses. Each one is isolated so a failure cannot lose the run."""
+    key_col = inputs.contract.entity_id
+    errors: dict[str, str] = {}
+
+    if cfg.analysis.permutation_importance:
+        try:
+            rows = importance_rows_for_run(
+                cv.fold_models,
+                cv.fold_val_keys,
+                inputs.X,
+                inputs.y,
+                n_repeats=cfg.analysis.permutation_repeats,
+                seed=cfg.seed,
+                max_rows=cfg.analysis.permutation_max_rows,
+            )
+            registry.log_feature_importance(engine, run_id, rows)
+            pooled = sorted(
+                (r for r in rows if r["fold"] == -1), key=lambda r: r["value"], reverse=True
+            )
+            logger.info(
+                "Run %s: top permutation importance %s",
+                run_id,
+                ", ".join(f"{r['feature']}={r['value']:.4f}" for r in pooled[:3]),
+            )
+        except Exception as exc:
+            logger.exception("Run %s: permutation importance failed", run_id)
+            errors["permutation_importance"] = f"{type(exc).__name__}: {exc}"
+
+    if cfg.analysis.error_sample_size > 0:
+        try:
+            sample = error_sample(
+                cv.oof, inputs.X, inputs.y, key_col, cfg.analysis.error_sample_size
+            )
+            sample.to_csv(run_dir / "error_sample.csv", index=False)
+        except Exception as exc:
+            logger.exception("Run %s: error sample failed", run_id)
+            errors["error_sample"] = f"{type(exc).__name__}: {exc}"
+
+    if errors:
+        run_artifacts.write_json(run_dir / "analysis_errors.json", errors)
 
 
 def _train_and_record(
@@ -70,6 +127,10 @@ def _train_and_record(
     )
 
     final.save(run_dir / "model.ubj")
+    fold_dir = run_dir / "fold_models"
+    fold_dir.mkdir()
+    for fold, adapter in cv.fold_models.items():
+        adapter.save(fold_dir / f"fold_{fold}.ubj")
     cv.oof.to_parquet(run_dir / "oof_predictions.parquet", index=False)
     cv.folds.to_csv(run_dir / "cv_folds.csv", index=False)
     run_artifacts.write_json(
@@ -84,6 +145,8 @@ def _train_and_record(
     )
 
     registry.log_metrics(engine, run_id, cv.metric_rows)
+    _run_analyses(cfg, engine, run_id, run_dir, inputs, cv)
+
     primary = next(
         r["value"]
         for r in cv.metric_rows
@@ -97,7 +160,12 @@ def _train_and_record(
         primary,
         cv.n_rounds_final,
     )
-    return {"primary_value": primary, "n_rounds_final": cv.n_rounds_final}
+    return {
+        "primary_value": primary,
+        "n_rounds_final": cv.n_rounds_final,
+        "n_rows": len(inputs.X),
+        "n_features": inputs.X.shape[1],
+    }
 
 
 def execute_run(
@@ -116,6 +184,7 @@ def execute_run(
     from ml_template.training.run_config import resolve_path
     from ml_template.training.run_inputs import split_id_for
 
+    started = time.perf_counter()
     contract = load_dataset_contract(resolve_path(cfg.data.dataset_config))
     run_id = registry.new_run_id("run")
     run_dir = run_artifacts.create_run_dir(run_id, run_root)
@@ -154,6 +223,7 @@ def execute_run(
                 engine,
                 run_id,
                 succeeded=False,
+                duration_s=time.perf_counter() - started,
                 error_summary=f"{type(exc).__name__}: {exc}"[:500],
             )
             raise
@@ -164,6 +234,9 @@ def execute_run(
             primary_metric=cfg.metrics.primary,
             primary_value=outcome["primary_value"],
             n_rounds_final=outcome["n_rounds_final"],
+            n_rows=outcome["n_rows"],
+            n_features=outcome["n_features"],
+            duration_s=time.perf_counter() - started,
         )
     return run_id
 

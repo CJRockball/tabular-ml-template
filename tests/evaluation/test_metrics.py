@@ -89,3 +89,32 @@ def test_long_form_rows():
     assert [(r["fold"], r["metric"]) for r in hold] == [(-1, "pr_auc")]
     with pytest.raises(ValueError):
         m.long_form_metrics(y, s, ["pr_auc"], split="cv", folds=[0, 1])
+
+
+def test_with_standard_adds_but_never_removes():
+    names, rates = m.with_standard(None, None)
+    assert names == list(m.STANDARD_METRICS) and rates == [0.05, 0.10]
+    names, rates = m.with_standard(["roc_auc"], [0.01, 0.05])
+    assert names == list(m.STANDARD_METRICS)  # roc_auc was already standard
+    assert rates == [0.01, 0.05, 0.10]
+    assert m.with_standard(["extra"], [])[0][-1] == "extra"
+
+
+def test_label_summary_rows():
+    rows = m.label_summary_rows([0, 0, 0, 1], split="cv")
+    values = {r["metric"]: r["value"] for r in rows}
+    assert values == {"n_rows": 4.0, "n_positives": 1.0, "base_rate": 0.25}
+    assert all(r["split"] == "cv" and r["fold"] == -1 for r in rows)
+
+
+def test_fold_stability_rows_mean_and_sample_std():
+    rows = [
+        {"split": "cv", "fold": -1, "metric": "pr_auc", "value": 0.5},
+        {"split": "cv", "fold": 0, "metric": "pr_auc", "value": 0.4},
+        {"split": "cv", "fold": 1, "metric": "pr_auc", "value": 0.6},
+        {"split": "cv", "fold": 2, "metric": "pr_auc", "value": float("nan")},
+    ]
+    out = {r["metric"]: r["value"] for r in m.fold_stability_rows(rows, ["pr_auc"])}
+    assert out["pr_auc__fold_mean"] == pytest.approx(0.5)
+    assert out["pr_auc__fold_std"] == pytest.approx(np.std([0.4, 0.6], ddof=1))
+    assert m.fold_stability_rows(rows[:2], ["pr_auc"]) == []  # one valid fold is not enough

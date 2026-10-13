@@ -1,9 +1,10 @@
-"""Load a Silver dataset for modelling, with integrity and role checks.
+"""Load a Silver dataset for modelling: key, features and one binary target.
 
 Roles come from the Silver manifest, which records the roles used when that exact
-version was built. Models select feature columns by explicit inclusion (the
-``feature`` role). The Parquet also carries lineage columns such as
-``dataset_version_id`` and ``source_row_number``; those are never features.
+version was built. Only the ``id``, ``feature`` and ``target`` roles are used; any
+other role (for example ``outcome``) is ignored, and only the columns the model
+needs are read from the Parquet file. Features are chosen by explicit inclusion,
+so lineage columns such as ``dataset_version_id`` can never reach a model.
 """
 
 from __future__ import annotations
@@ -18,15 +19,16 @@ import pandas as pd
 
 from ml_template.paths import DATA_SILVER
 
-REQUIRED_ROLES = ("id", "feature", "target", "outcome")
+REQUIRED_ROLES = ("id", "feature", "target")
+ROLE_ALIASES = {"ids": "id", "features": "feature", "targets": "target"}
 
 
 @dataclass(frozen=True)
 class SilverData:
     silver_dataset_version_id: str
     key_col: str
-    df: pd.DataFrame
-    roles: dict[str, list[str]]
+    df: pd.DataFrame  # key, feature and target columns only
+    roles: dict[str, list[str]]  # normalised: id, feature, target
     manifest: dict[str, Any]
     parquet_path: Path
 
@@ -38,13 +40,10 @@ class SilverData:
     def target(self) -> str:
         return self.roles["target"][0]
 
-    @property
-    def outcomes(self) -> list[str]:
-        return list(self.roles["outcome"])
-
-    def frame(self) -> pd.DataFrame:
-        """Rows indexed by the entity key and sorted by it."""
-        return self.df.set_index(self.key_col).sort_index()
+    def model_frame(self) -> pd.DataFrame:
+        """Rows indexed by the entity key and sorted by it: features plus the target."""
+        cols = [self.key_col, *self.features, self.target]
+        return self.df[cols].set_index(self.key_col).sort_index()
 
 
 def _sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
@@ -53,6 +52,15 @@ def _sha256_file(path: Path, chunk_size: int = 1 << 20) -> str:
         for chunk in iter(lambda: fh.read(chunk_size), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _normalise_roles(raw_roles: dict[str, Any]) -> dict[str, list[str]]:
+    roles: dict[str, list[str]] = {}
+    for name, columns in raw_roles.items():
+        canonical = ROLE_ALIASES.get(name, name)
+        if canonical in REQUIRED_ROLES:
+            roles.setdefault(canonical, []).extend(list(columns or []))
+    return roles
 
 
 def load_silver(
@@ -78,24 +86,27 @@ def load_silver(
         if observed != manifest["parquet_sha256"]:
             raise ValueError(f"{parquet_path} differs from the hash in its manifest")
 
-    df = pd.read_parquet(parquet_path)
-    if set(df.columns) != set(manifest["columns"]):
-        raise ValueError(f"{parquet_path} columns differ from its manifest")
-
-    roles = {k: list(v) for k, v in manifest["roles"].items()}
-    missing = [r for r in REQUIRED_ROLES if r not in roles]
+    roles = _normalise_roles(manifest["roles"])
+    missing = [r for r in REQUIRED_ROLES if not roles.get(r)]
     if missing:
-        raise ValueError(f"manifest has no roles {missing}")
+        raise ValueError(f"manifest has no columns for roles {missing}")
     if len(roles["target"]) != 1:
-        raise ValueError(f"expected exactly one target column, got {roles['target']}")
+        raise ValueError(
+            f"single-target template: manifest lists {len(roles['target'])} target columns "
+            f"{roles['target']}"
+        )
     if key_col not in roles["id"]:
         raise ValueError(f"key column {key_col!r} does not have the id role")
+    overlap = sorted(set(roles["feature"]) & (set(roles["id"]) | set(roles["target"])))
+    if overlap:
+        raise ValueError(f"feature role overlaps id or target columns: {overlap}")
 
-    forbidden = set(roles["id"]) | set(roles["target"]) | set(roles["outcome"])
-    leaked = sorted(set(roles["feature"]) & forbidden)
-    if leaked:
-        raise ValueError(f"feature role overlaps id, target or outcome columns: {leaked}")
+    needed = [key_col, *roles["feature"], roles["target"][0]]
+    absent = [c for c in needed if c not in manifest["columns"]]
+    if absent:
+        raise ValueError(f"{silver_dataset_version_id} manifest has no columns {absent}")
 
+    df = pd.read_parquet(parquet_path, columns=needed)
     if df[key_col].isna().any() or df[key_col].duplicated().any():
         raise ValueError(f"{key_col} must be unique and non-null")
     target = roles["target"][0]
