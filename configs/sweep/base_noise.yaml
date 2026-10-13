@@ -1,0 +1,4 @@
+base: configs/experiment/xgb_baseline.yaml
+experiment_name: base_noise
+grid:
+  seed: [1, 2, 3, 4, 5]

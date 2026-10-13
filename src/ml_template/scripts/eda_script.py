@@ -36,9 +36,9 @@ from sklearn.ensemble import IsolationForest
 from sklearn.feature_selection import mutual_info_classif
 
 from ml_template.data.extract import extract_bronze
-from ml_template.db import registry
+from ml_template.db import data_run_registry
 from ml_template.db.connection import get_engine
-from ml_template.tracking.utils import setup_logging
+from ml_template.tracking.pipeline_logging import setup_logging
 
 logger = logging.getLogger("ml_template.scripts.eda")
 
@@ -493,7 +493,7 @@ def main() -> None:
 
     engine = get_engine()
     config_sha256 = hashlib.sha256(Path(args.config).read_bytes()).hexdigest()
-    run_id = registry.start_eda_run(
+    run_id = data_run_registry.start_eda_run(
         engine, args.dataset_version_id, config_sha256=config_sha256
     )
     report_path = out_dir / f"eda_report_{args.dataset_version_id}.json"
@@ -501,11 +501,11 @@ def main() -> None:
         run_eda(args.dataset_version_id, args.config, out_dir)
         saved = json.loads(report_path.read_text())
     except Exception as exc:
-        registry.finish_eda_run(
+        data_run_registry.finish_eda_run(
             engine, run_id, succeeded=False, error_summary=str(exc)[:500]
         )
         raise
-    registry.finish_eda_run(
+    data_run_registry.finish_eda_run(
         engine,
         run_id,
         succeeded=True,

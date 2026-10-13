@@ -32,14 +32,14 @@ classifiers = [
 dependencies = [
     "numpy>=1.26",
     "pandas>=2.2",
-    "pyarrow>=15.0", # parquet I/O 
+    "pyarrow>=15.0", # parquet I/O
     "scikit-learn>=1.4,<2.0", # RepeatedStratifiedKFold, metrics, mutual_info
     "xgboost==2.1.1", # 2.x callback API (EarlyStopping save_best)
     "scipy>=1.11", # spearmanr, connected_components, stats
     "matplotlib>=3.8",
-    "seaborn>=0.13", 
+    "seaborn>=0.13",
     "pydantic>=2.0,<3.0",
-    "SQLAlchemy>=2.0,<2.1",
+    "sqlalchemy>=2.0,<2.1",
     "pandera>=0.33.1",
     "statsmodels>=0.14",
     "shap>=0.45",
@@ -48,6 +48,7 @@ dependencies = [
     "dash>=3.4,<4",
     "plotly>=6,<7",
     "dash-ag-grid>=33",
+    "pyyaml>=6.0.3",
 ]
  
 # Dependency groups = DEVELOPER-only tooling, never published (PEP 735).
