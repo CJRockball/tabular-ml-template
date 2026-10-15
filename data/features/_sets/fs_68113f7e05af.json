@@ -1,0 +1,64 @@
+{
+  "blocks": [
+    "thermal_power_4bced365f0b4",
+    "strain_771fcf3f44ea",
+    "rule_margins_846804cd161e",
+    "wear_window_e36775ff9a9e"
+  ],
+  "column_sources": {
+    "air_temperature_k": "silver",
+    "hdf_speed_margin_rpm": "rule_margins",
+    "hdf_temp_margin_k": "rule_margins",
+    "osf_margin_minnm": "strain",
+    "power_w": "thermal_power",
+    "pwf_high_margin_w": "rule_margins",
+    "rotational_speed_rpm": "silver",
+    "temp_diff_k": "thermal_power",
+    "tool_wear_min": "silver",
+    "torque_nm": "silver",
+    "type": "silver",
+    "wear_torque_minnm": "strain"
+  },
+  "columns": [
+    "rotational_speed_rpm",
+    "hdf_temp_margin_k",
+    "osf_margin_minnm",
+    "power_w",
+    "tool_wear_min",
+    "temp_diff_k",
+    "torque_nm",
+    "wear_torque_minnm",
+    "pwf_high_margin_w",
+    "hdf_speed_margin_rpm",
+    "air_temperature_k",
+    "type"
+  ],
+  "created_at": "2026-10-13T08:23:24.603292+00:00",
+  "description": "",
+  "feature_set_id": "fs_68113f7e05af",
+  "n_features": 12,
+  "parent_feature_set_id": "fs_dade8bd0f10b",
+  "raw_columns": [
+    "type",
+    "air_temperature_k",
+    "process_temperature_k",
+    "rotational_speed_rpm",
+    "torque_nm",
+    "tool_wear_min"
+  ],
+  "selection": [
+    "rotational_speed_rpm",
+    "hdf_temp_margin_k",
+    "osf_margin_minnm",
+    "power_w",
+    "tool_wear_min",
+    "temp_diff_k",
+    "torque_nm",
+    "wear_torque_minnm",
+    "pwf_high_margin_w",
+    "hdf_speed_margin_rpm",
+    "air_temperature_k",
+    "type"
+  ],
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364"
+}

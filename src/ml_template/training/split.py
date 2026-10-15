@@ -33,13 +33,26 @@ HOLDOUT_FOLD = -1
 MIN_POSITIVES = 5  # per fold and for the holdout
 
 
+def split_policy(cfg: SplitConfig) -> dict[str, Any]:
+    """Exclude an unset cv_seed to preserve existing split IDs."""
+    policy = cfg.model_dump(mode="json")
+
+    if policy.get("cv_seed") is None:
+        policy.pop("cv_seed", None)
+
+    return policy
+
+
 def compute_split_id(
-    silver_dataset_version_id: str, cfg: SplitConfig, key_col: str, target_col: str
+    silver_dataset_version_id: str,
+    cfg: SplitConfig,
+    key_col: str,
+    target_col: str,
 ) -> str:
     payload = json.dumps(
         {
             "silver": silver_dataset_version_id,
-            "policy": cfg.model_dump(mode="json"),
+            "policy": split_policy(cfg),
             "key": key_col,
             "target": target_col,
         },
@@ -67,7 +80,13 @@ def make_split(df: pd.DataFrame, cfg: SplitConfig, key_col: str, target_col: str
     dev_idx = np.sort(dev_idx)
 
     fold = np.full(len(data), HOLDOUT_FOLD, dtype=int)
-    skf = StratifiedKFold(n_splits=cfg.n_folds, shuffle=True, random_state=cfg.seed)
+    cv_seed = cfg.seed if cfg.cv_seed is None else cfg.cv_seed
+
+    skf = StratifiedKFold(
+        n_splits=cfg.n_folds,
+        shuffle=True,
+        random_state=cv_seed,
+    )
     for k, (_, val) in enumerate(skf.split(dev_idx, y[dev_idx])):
         fold[dev_idx[val]] = k
 
@@ -106,7 +125,7 @@ def _manifest(
     manifest: dict[str, Any] = {
         "split_id": split_id,
         "silver_dataset_version_id": silver_id,
-        "policy": cfg.model_dump(mode="json"),
+        "policy": split_policy(cfg),
         "key_col": key_col,
         "target_col": target_col,
         "n_rows": int(len(assignments)),
@@ -225,6 +244,32 @@ def main(argv: list[str] | None = None) -> None:
 
     df = pd.read_parquet(parquet, columns=[key_col, target_col])
     assignments = make_split(df, cfg.split, key_col, target_col)
+
+    if cfg.split.cv_seed is not None:
+        original_policy = cfg.split.model_copy(update={"cv_seed": None})
+        original_id = compute_split_id(
+            silver_id,
+            original_policy,
+            key_col,
+            target_col,
+        )
+        original = load_split(original_id, args.split_root)
+
+        original_keys = set(original[key_col])
+        new_keys = set(assignments[key_col])
+        if original_keys != new_keys:
+            raise ValueError("New assignments do not cover the same rows as the original split")
+
+        original_holdout = set(holdout_keys(original, key_col))
+        new_holdout = set(holdout_keys(assignments, key_col))
+        if original_holdout != new_holdout:
+            raise ValueError("Holdout membership changed; refusing to save the new CV split")
+
+        logger.info(
+            "Verified unchanged holdout against original split %s",
+            original_id,
+        )
+
     target = df.sort_values(key_col)[target_col].reset_index(drop=True)
     split_id, out_dir, manifest = save_split(
         assignments, silver_id, cfg.split, key_col, target_col, target, args.split_root

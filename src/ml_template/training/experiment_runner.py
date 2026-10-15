@@ -138,6 +138,7 @@ def _train_and_record(
         {
             "features": list(inputs.X.columns),
             "dtypes": {c: str(t) for c, t in inputs.X.dtypes.items()},
+            "fitted_features": cfg.fitted_features,
             "n_rounds_final": cv.n_rounds_final,
             "silver_dataset_version_id": cfg.data.silver_dataset_version_id,
             "split_id": inputs.split_id,

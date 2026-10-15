@@ -53,13 +53,29 @@ def build_adapter_factory(cfg: RunConfig) -> AdapterFactory:
     if cfg.model.type == "xgb":
         from ml_template.models.xgb_classifier import XGBAdapter
 
-        return lambda: XGBAdapter(cfg.model.params, cfg.seed)
-    raise ValueError(f"unknown model type {cfg.model.type!r}")
+        def base() -> ModelAdapter:
+            return XGBAdapter(cfg.model.params, cfg.seed)
+
+    else:
+        raise ValueError(f"unknown model type {cfg.model.type!r}")
+
+    if not cfg.fitted_features:
+        return base
+    from ml_template.features.fitted_features import TransformingAdapter
+
+    return lambda: TransformingAdapter(base(), cfg.fitted_features)
 
 
 def load_adapter(cfg: RunConfig, path: Path) -> ModelAdapter:
     if cfg.model.type == "xgb":
         from ml_template.models.xgb_classifier import XGBAdapter
 
-        return XGBAdapter.load(cfg.model.params, cfg.seed, path)
-    raise ValueError(f"unknown model type {cfg.model.type!r}")
+        inner = XGBAdapter.load(cfg.model.params, cfg.seed, path)
+    else:
+        raise ValueError(f"unknown model type {cfg.model.type!r}")
+
+    if not cfg.fitted_features:
+        return inner
+    from ml_template.features.fitted_features import TransformingAdapter
+
+    return TransformingAdapter.load(inner, cfg.fitted_features, path)

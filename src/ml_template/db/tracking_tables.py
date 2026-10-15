@@ -131,6 +131,38 @@ run_feature_importance = Table(
     Column("std", Float),  # per fold: across repeats; at -1: across folds
 )
 
+feature_blocks = Table(
+    "feature_blocks",
+    tracking_metadata,
+    Column("block_id", String, primary_key=True),
+    Column("block_name", String, nullable=False, index=True),
+    Column("silver_dataset_version_id", String, nullable=False, index=True),
+    Column("code_sha256", String, nullable=False),
+    Column("params_json", Text),
+    Column("columns_json", Text),
+    Column("derived_from_json", Text),
+    Column("description", Text),
+    Column("n_rows", Integer),
+    Column("parquet_path", String),
+    Column("parquet_sha256", String),
+    Column("sanity_json", Text),
+    Column("created_at", String),
+)
+
+feature_sets = Table(
+    "feature_sets",
+    tracking_metadata,
+    Column("feature_set_id", String, primary_key=True),
+    Column("silver_dataset_version_id", String, nullable=False, index=True),
+    Column("parent_feature_set_id", String, index=True),
+    Column("blocks_json", Text),  # ordered block IDs
+    Column("columns_json", Text),  # final model columns, in order
+    Column("n_features", Integer),
+    Column("description", Text),
+    Column("manifest_path", String),
+    Column("created_at", String),
+)
+
 
 def _add_missing_columns(engine: Engine) -> None:
     inspector = inspect(engine)

@@ -1,0 +1,40 @@
+{
+  "blocks": [
+    "strain_771fcf3f44ea"
+  ],
+  "column_sources": {
+    "air_temperature_k": "silver",
+    "osf_margin_minnm": "strain",
+    "process_temperature_k": "silver",
+    "rotational_speed_rpm": "silver",
+    "tool_wear_min": "silver",
+    "torque_nm": "silver",
+    "type": "silver",
+    "wear_torque_minnm": "strain"
+  },
+  "columns": [
+    "type",
+    "air_temperature_k",
+    "process_temperature_k",
+    "rotational_speed_rpm",
+    "torque_nm",
+    "tool_wear_min",
+    "wear_torque_minnm",
+    "osf_margin_minnm"
+  ],
+  "created_at": "2026-10-13T06:06:44.731036+00:00",
+  "description": "",
+  "feature_set_id": "fs_5e79772facfc",
+  "n_features": 8,
+  "parent_feature_set_id": null,
+  "raw_columns": [
+    "type",
+    "air_temperature_k",
+    "process_temperature_k",
+    "rotational_speed_rpm",
+    "torque_nm",
+    "tool_wear_min"
+  ],
+  "selection": null,
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364"
+}

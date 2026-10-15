@@ -1,0 +1,74 @@
+{
+  "block_id": "generic_interactions_b9d792a528be",
+  "block_name": "generic_interactions",
+  "code_sha256": "054111edc27f6f72c647daf3dbbdd15542ceaf2d5fb2db6d13ecd782756eb06e",
+  "columns": [
+    "torque_nm__square",
+    "torque_nm__log1p",
+    "tool_wear_min__square",
+    "tool_wear_min__log1p",
+    "torque_nm__div__rotational_speed_rpm",
+    "tool_wear_min__if_type_L",
+    "tool_wear_min__if_type_M",
+    "tool_wear_min__if_type_H"
+  ],
+  "created_at": "2026-10-15T06:58:53.808915+00:00",
+  "derived_from": [
+    "torque_nm",
+    "tool_wear_min",
+    "rotational_speed_rpm",
+    "type"
+  ],
+  "description": "parameter-driven transforms, numeric/categorical crosses (stateless)",
+  "dtypes": {
+    "tool_wear_min__if_type_H": "float64",
+    "tool_wear_min__if_type_L": "float64",
+    "tool_wear_min__if_type_M": "float64",
+    "tool_wear_min__log1p": "float64",
+    "tool_wear_min__square": "float64",
+    "torque_nm__div__rotational_speed_rpm": "float64",
+    "torque_nm__log1p": "float64",
+    "torque_nm__square": "float64"
+  },
+  "key_col": "udi",
+  "n_rows": 10000,
+  "params": {
+    "category_pairs": [],
+    "numeric_category": [
+      {
+        "category": "type",
+        "levels": [
+          "L",
+          "M",
+          "H"
+        ],
+        "numeric": "tool_wear_min"
+      }
+    ],
+    "numeric_pairs": [
+      {
+        "a": "torque_nm",
+        "b": "rotational_speed_rpm",
+        "ops": [
+          "ratio"
+        ]
+      }
+    ],
+    "transforms": [
+      {
+        "columns": [
+          "torque_nm",
+          "tool_wear_min"
+        ],
+        "ops": [
+          "square",
+          "log1p"
+        ]
+      }
+    ]
+  },
+  "parquet_path": "/home/python_user/coding/ds/tabular-ml-template/data/features/generic_interactions_b9d792a528be/data.parquet",
+  "parquet_sha256": "b80c5de1a99781a8e6c9936e5efcb01c12d10ac2f3fa05b3efc6f05476ed2090",
+  "sanity": {},
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364"
+}

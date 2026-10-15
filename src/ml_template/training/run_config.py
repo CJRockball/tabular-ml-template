@@ -50,12 +50,18 @@ class DataConfig(_Strict):
 
 
 class SplitConfig(_Strict):
-    """Split policy. Key and target columns come from the dataset contract."""
+    """Holdout policy and development-only CV-fold policy."""
 
     method: Literal["stratified"] = "stratified"
     holdout_fraction: float = Field(0.2, gt=0, lt=1)
     n_folds: int = Field(5, ge=2)
-    seed: int = 42  # keep fixed across model seeds so runs share one split
+
+    # Controls development/holdout membership. Keep fixed.
+    seed: int = 42
+
+    # Controls development-fold assignments only.
+    # None preserves the original behavior and split identity.
+    cv_seed: int | None = None
 
 
 class TrainingConfig(_Strict):
@@ -129,6 +135,8 @@ class RunConfig(_Strict):
     training: TrainingConfig = Field(default_factory=TrainingConfig)
     metrics: MetricsConfig = Field(default_factory=MetricsConfig)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    # Steps that learn from training rows (group statistics, power transforms); None = none.
+    fitted_features: list[dict[str, Any]] | None = None
     # Add further model types here later as a discriminated union on ``type``.
     model: XGBModelConfig = Field(default_factory=XGBModelConfig)
 
@@ -137,6 +145,15 @@ class RunConfig(_Strict):
     def _name(cls, v: str) -> str:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", v):
             raise ValueError("experiment_name may only use letters, digits, _ . -")
+        return v
+
+    @field_validator("fitted_features")
+    @classmethod
+    def _fitted(cls, v: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+        if v:
+            from ml_template.features.fitted_features import validate_specs
+
+            validate_specs(v)
         return v
 
 
@@ -251,8 +268,12 @@ def config_json(cfg: RunConfig) -> str:
 
 
 def config_hash(cfg: RunConfig) -> str:
-    """Identity of what the run trains. Reporting-only sections are left out."""
+    """Identity of what the run trains. Reporting-only sections and unset options are left out."""
     payload = cfg.model_dump(mode="json", exclude=HASH_EXCLUDED_SECTIONS)
+    if payload.get("fitted_features") is None:
+        payload.pop("fitted_features", None)
+    if payload["split"].get("cv_seed") is None:
+        payload["split"].pop("cv_seed", None)
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode()).hexdigest()[:12]
 

@@ -1,0 +1,39 @@
+{
+  "block_id": "strain_771fcf3f44ea",
+  "block_name": "strain",
+  "code_sha256": "f1817ca24f45d5e819ecc7f77edf374ca01d40e38c95606da496699274e90a7e",
+  "columns": [
+    "wear_torque_minnm",
+    "osf_margin_minnm"
+  ],
+  "created_at": "2026-10-13T06:06:44.730019+00:00",
+  "derived_from": [
+    "type",
+    "torque_nm",
+    "tool_wear_min"
+  ],
+  "description": "wear_torque_minnm = wear x torque; osf_margin_minnm = type limit - wear_torque",
+  "dtypes": {
+    "osf_margin_minnm": "float64",
+    "wear_torque_minnm": "float64"
+  },
+  "key_col": "udi",
+  "n_rows": 10000,
+  "params": {
+    "osf_limit_minnm": {
+      "H": 13000.0,
+      "L": 11000.0,
+      "M": 12000.0
+    }
+  },
+  "parquet_path": "/home/python_user/coding/ds/tabular-ml-template/data/features/strain_771fcf3f44ea/data.parquet",
+  "parquet_sha256": "ba13aaf90d8f1d848859fd478f1d0b00a85559bc9da229e13052a62cfc25f7ba",
+  "sanity": {
+    "osf_rule_rows": {
+      "expected": null,
+      "observed": 98.0,
+      "ok": true
+    }
+  },
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364"
+}
