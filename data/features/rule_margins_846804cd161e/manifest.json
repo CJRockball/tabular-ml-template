@@ -1,0 +1,43 @@
+{
+  "block_id": "rule_margins_846804cd161e",
+  "block_name": "rule_margins",
+  "code_sha256": "add6473f5f8e42d3ec9bff68a4e194ac3da4c81ef7d21606a068f2168b503488",
+  "columns": [
+    "hdf_temp_margin_k",
+    "hdf_speed_margin_rpm",
+    "pwf_low_margin_w",
+    "pwf_high_margin_w"
+  ],
+  "created_at": "2026-10-13T06:35:04.492286+00:00",
+  "derived_from": [
+    "air_temperature_k",
+    "process_temperature_k",
+    "rotational_speed_rpm",
+    "torque_nm"
+  ],
+  "description": "signed distances to the 8.6 K, 1380 rpm, 3500 W and 9000 W thresholds",
+  "dtypes": {
+    "hdf_speed_margin_rpm": "float64",
+    "hdf_temp_margin_k": "float64",
+    "pwf_high_margin_w": "float64",
+    "pwf_low_margin_w": "float64"
+  },
+  "key_col": "udi",
+  "n_rows": 10000,
+  "params": {},
+  "parquet_path": "/home/python_user/coding/ds/tabular-ml-template/data/features/rule_margins_846804cd161e/data.parquet",
+  "parquet_sha256": "ffe02d3169d9d3cdae1a21d4c120b49cb6205baaab637614fda13fb2536bd007",
+  "sanity": {
+    "hdf_rule_rows": {
+      "expected": 115.0,
+      "observed": 115.0,
+      "ok": true
+    },
+    "pwf_rule_rows": {
+      "expected": null,
+      "observed": 95.0,
+      "ok": true
+    }
+  },
+  "silver_dataset_version_id": "silver_ds_v1_eaa07364"
+}

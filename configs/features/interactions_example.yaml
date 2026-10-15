@@ -1,0 +1,8 @@
+generic_interactions:
+  transforms:
+    - columns: [torque_nm, tool_wear_min]
+      ops: [square, log1p]
+  numeric_pairs:
+    - {a: torque_nm, b: rotational_speed_rpm, ops: [ratio]}
+  numeric_category:
+    - {numeric: tool_wear_min, category: type, levels: [L, M, H]}

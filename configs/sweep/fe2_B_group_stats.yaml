@@ -1,0 +1,4 @@
+base: configs/experiment/fe2_B_group_stats.yaml
+experiment_name: fe2_B_group_stats
+grid:
+  seed: [1, 2, 3, 4, 5]

@@ -13,8 +13,9 @@ import pandas as pd
 
 from ml_template.data.contract import DatasetContract, load_dataset_contract
 from ml_template.data.silver_loader import SilverData, load_silver
+from ml_template.features.feature_set_store import resolve_feature_set
 from ml_template.models.model_factory import prepare_features
-from ml_template.paths import DATA_SILVER, DATA_SPLITS
+from ml_template.paths import DATA_FEATURES, DATA_SILVER, DATA_SPLITS
 from ml_template.training.run_config import RunConfig, resolve_path
 from ml_template.training.split import compute_split_id, load_split
 
@@ -36,11 +37,12 @@ def split_id_for(cfg: RunConfig, contract: DatasetContract) -> str:
 
 
 def load_run_inputs(
-    cfg: RunConfig, *, silver_root: Path = DATA_SILVER, split_root: Path = DATA_SPLITS
+    cfg: RunConfig,
+    *,
+    silver_root: Path = DATA_SILVER,
+    split_root: Path = DATA_SPLITS,
+    feature_root: Path = DATA_FEATURES,
 ) -> RunInputs:
-    if cfg.data.feature_set_id is not None:
-        raise NotImplementedError("feature sets arrive with the feature-block modules")
-
     contract = load_dataset_contract(resolve_path(cfg.data.dataset_config))
     silver = load_silver(
         cfg.data.silver_dataset_version_id, cfg.data.dataset_name, contract.entity_id, silver_root
@@ -55,7 +57,12 @@ def load_run_inputs(
     assignments = load_split(split_id, split_root)
 
     frame = silver.model_frame()
-    X = prepare_features(frame[silver.features])
+    raw = frame[silver.features]
+    if cfg.data.feature_set_id is not None:
+        raw = resolve_feature_set(
+            cfg.data.feature_set_id, raw, silver.silver_dataset_version_id, feature_root
+        )
+    X = prepare_features(raw)
     y = frame[silver.target].astype(int)
     if set(assignments[contract.entity_id]) != set(frame.index):
         raise ValueError(
