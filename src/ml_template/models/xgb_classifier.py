@@ -11,6 +11,7 @@ releases no longer define, so it fails on some xgboost/scikit-learn pairings.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,24 @@ def resolve_scale_pos_weight(value: float | str, y: pd.Series) -> float:
             raise ValueError("cannot compute scale_pos_weight: no positives in training rows")
         return (len(y) - positives) / positives
     return float(value)
+
+
+def curve_rows(history: Mapping[str, Mapping[str, Sequence[float]]], metric: str) -> pd.DataFrame:
+    """Long table (round, dataset, metric, value) from XGBoost's evals_result."""
+    parts = []
+    for key, label in (("validation_0", "train"), ("validation_1", "val")):
+        values = np.asarray(history[key][metric], dtype=float)
+        parts.append(
+            pd.DataFrame(
+                {
+                    "round": np.arange(1, len(values) + 1),
+                    "dataset": label,
+                    "metric": metric,
+                    "value": values,
+                }
+            )
+        )
+    return pd.concat(parts, ignore_index=True)
 
 
 class XGBAdapter:
@@ -85,6 +104,21 @@ class XGBAdapter:
         model = self._build(y, int(n_rounds), None)
         model.fit(X, y, verbose=False)
         self.model, self._loaded_booster = model, None
+
+    def learning_curve(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val: pd.DataFrame,
+        y_val: pd.Series,
+        n_rounds: int,
+        metric: str,
+    ) -> pd.DataFrame:
+        """Metric per round on the training and validation rows. No early stopping."""
+        model = self._build(y_train, int(n_rounds), None)
+        model.set_params(eval_metric=metric)
+        model.fit(X_train, y_train, eval_set=[(X_train, y_train), (X_val, y_val)], verbose=False)
+        return curve_rows(model.evals_result(), metric)
 
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         """Probability of the positive class."""

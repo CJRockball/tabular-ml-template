@@ -101,6 +101,9 @@ class AnalysisConfig(_Strict):
     permutation_repeats: int = Field(10, ge=1)
     permutation_max_rows: int = Field(50_000, ge=100)  # validation rows used per fold
     error_sample_size: int = Field(25, ge=0)  # rows per kind in error_sample.csv; 0 = off
+    learning_curves: bool = False  # per-round train/validation metric table; off by default
+    learning_curve_metric: Literal["logloss", "aucpr", "auc", "error"] = "logloss"
+    learning_curve_rounds: int | None = Field(None, ge=1)  # None = twice each fold's best round
 
 
 class XGBParams(_Strict):

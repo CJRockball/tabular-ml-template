@@ -6,7 +6,7 @@ EXP    ?= configs/experiment/xgb_baseline.yaml
 SWEEP  ?= configs/sweep/xgb_grid.yaml
 RUN    := uv run python
 
-.PHONY: ingest eda silver split features train sweep evaluate pipeline clean rebuild check
+.PHONY: ingest eda silver split features train sweep evaluate pipeline clean rebuild check dashboard
 
 ingest:
 	$(RUN) -m $(PKG).data.ingest --data_file $(CONFIG) --dataset_version_id $(DS)
@@ -26,6 +26,8 @@ sweep:
 	$(RUN) -m $(PKG).training.train_model --sweep $(SWEEP)
 evaluate:
 	$(RUN) -m $(PKG).evaluation.evaluate_run --run-id $(RUN_ID)
+dashboard:
+	$(RUN) -m $(PKG).dashboard.app
 
 pipeline: ingest eda silver split train
 rebuild: clean pipeline
