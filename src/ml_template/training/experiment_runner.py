@@ -26,6 +26,7 @@ from sqlalchemy import Engine
 
 from ml_template.db import model_run_registry as registry
 from ml_template.evaluation.error_sample import error_sample
+from ml_template.evaluation.learning_curves import learning_curves_for_run
 from ml_template.evaluation.permutation_importance import importance_rows_for_run
 from ml_template.models.model_factory import AdapterFactory, build_adapter_factory
 from ml_template.paths import ARTIFACTS_RUNS, DATA_SILVER, DATA_SPLITS, LOGS
@@ -42,7 +43,13 @@ FactoryBuilder = Callable[[RunConfig], AdapterFactory]
 
 
 def _run_analyses(
-    cfg: RunConfig, engine: Engine, run_id: str, run_dir: Path, inputs: Any, cv: Any
+    cfg: RunConfig,
+    engine: Engine,
+    run_id: str,
+    run_dir: Path,
+    inputs: Any,
+    cv: Any,
+    make_adapter: AdapterFactory,
 ) -> None:
     """Standard analyses. Each one is isolated so a failure cannot lose the run."""
     key_col = inputs.contract.entity_id
@@ -81,6 +88,23 @@ def _run_analyses(
         except Exception as exc:
             logger.exception("Run %s: error sample failed", run_id)
             errors["error_sample"] = f"{type(exc).__name__}: {exc}"
+
+    if cfg.analysis.learning_curves:
+        try:
+            table = learning_curves_for_run(
+                make_adapter,
+                inputs.X,
+                inputs.y,
+                inputs.assignments,
+                key_col,
+                cv.folds,
+                metric=cfg.analysis.learning_curve_metric,
+                max_rounds=cfg.analysis.learning_curve_rounds,
+            )
+            table.to_parquet(run_dir / "learning_curves.parquet", index=False)
+        except Exception as exc:
+            logger.exception("Run %s: learning curves failed", run_id)
+            errors["learning_curves"] = f"{type(exc).__name__}: {exc}"
 
     if errors:
         run_artifacts.write_json(run_dir / "analysis_errors.json", errors)
@@ -146,7 +170,7 @@ def _train_and_record(
     )
 
     registry.log_metrics(engine, run_id, cv.metric_rows)
-    _run_analyses(cfg, engine, run_id, run_dir, inputs, cv)
+    _run_analyses(cfg, engine, run_id, run_dir, inputs, cv, make_adapter)
 
     primary = next(
         r["value"]

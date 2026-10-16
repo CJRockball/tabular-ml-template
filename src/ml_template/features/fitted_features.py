@@ -112,6 +112,25 @@ class TransformingAdapter:
         self.transformer = FittedFeatureTransformer(self.specs).fit(X)
         self.inner.refit(self.transformer.transform(X), y, n_rounds)
 
+    def learning_curve(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        X_val: pd.DataFrame,
+        y_val: pd.Series,
+        n_rounds: int,
+        metric: str,
+    ) -> pd.DataFrame:
+        transformer = FittedFeatureTransformer(self.specs).fit(X_train)
+        return self.inner.learning_curve(
+            transformer.transform(X_train),
+            y_train,
+            transformer.transform(X_val),
+            y_val,
+            n_rounds,
+            metric,
+        )
+
     def predict_proba(self, X: pd.DataFrame) -> np.ndarray:
         if self.transformer is None:
             raise RuntimeError("model is not fitted")

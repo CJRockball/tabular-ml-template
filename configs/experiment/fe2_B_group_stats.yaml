@@ -30,6 +30,9 @@ analysis:
   permutation_repeats: 10
   permutation_max_rows: 50000
   error_sample_size: 25
+  learning_curves: true
+  learning_curve_metric: logloss   # logloss, aucpr, auc or error
+  learning_curve_rounds: null      # null = twice each fold's best round
 
 fitted_features:
   - step: group_statistics
