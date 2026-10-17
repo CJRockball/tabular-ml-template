@@ -50,6 +50,13 @@ logs/*
 !/data/raw/
 /data/raw/*
 !/data/raw/.gitignore
+# Don't commit all the training configs
+/config/experiment/*
+!/config/experiment/.gitignore
+/config/features/*
+!/config/features/.gitignore
+/config/sweep/*
+!/config/sweep/.gitignore
 # --- Don't upload unnecessary files ---
 # Notebooks
 notebooks/*
