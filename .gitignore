@@ -53,6 +53,7 @@ logs/*
 # Don't commit all the training configs
 /configs/experiment/*
 !/configs/experiment/.gitignore
+!/configs/experiment/xgb_baseline.yaml
 /configs/features/*
 !/configs/features/.gitignore
 /configs/sweep/*
