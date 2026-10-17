@@ -1,0 +1,12 @@
+# 3 x 2 x 2 = 12 runs. One launch = one experiment_run_id (assigned by the runner).
+# Check it first:  python -m ml_template.training.run_config --sweep configs/sweep/xgb_grid.yaml
+base: configs/experiment/fe2_B_group_stats.yaml
+experiment_name: fe2_B_param_2_sweep
+grid:
+  model.params.max_depth: [5,7,9]
+  model.params.learning_rate: [0.08, 0.13]
+  model.params.scale_pos_weight: [auto, 15]
+  model.params.min_child_weight: [1,5,10]
+  model.params.reg_lambda: [0.1, 3, 8]
+  model.params.reg_alpha: [0, 0.1, 1]
+  model.params.colsample_bytree: [0.7, 0.85, 1.0]

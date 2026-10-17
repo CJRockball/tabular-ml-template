@@ -34,7 +34,7 @@ from ml_template.evaluation.metrics import resolved_keys, with_standard
 from ml_template.paths import ROOT
 
 SCHEMA_VERSION = 2
-MAX_SWEEP_RUNS = 200
+MAX_SWEEP_RUNS = 1000
 HASH_EXCLUDED_SECTIONS = {"analysis"}
 
 

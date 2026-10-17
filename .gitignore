@@ -45,11 +45,11 @@ logs/*
 !logs/.gitignore
 # --- Data policy (see data/README.md) ---
 # Raw SECOM files: regenerable via fetch, never commit.
-data/raw/*
-!data/raw/.gitignore
-# Processed intermediates: regenerate deterministically from code + config.
-data/silver/*
-!data/silver/.gitignore
+# Ignore everything under data except the raw placeholder.
+/data/*
+!/data/raw/
+/data/raw/*
+!/data/raw/.gitignore
 # --- Don't upload unnecessary files ---
 # Notebooks
 notebooks/*
