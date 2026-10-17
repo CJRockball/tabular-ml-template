@@ -1,0 +1,47 @@
+# B plus fitted group statistics. Steps are fitted on training rows inside every fold.
+schema_version: 2
+experiment_name: fe2_B_group_stats2
+seed: 42
+
+data:
+  dataset_name: ai4i
+  dataset_config: configs/ai4i_binary.yaml
+  silver_dataset_version_id: silver_ds_v1_eaa07364
+  feature_set_id: fs_4f6488681eae  # B
+
+split:
+  method: stratified
+  holdout_fraction: 0.2
+  n_folds: 5
+  seed: 42
+  cv_seed: 43
+
+training:
+  validation_fraction: 0.2
+  refit_rounds_factor: 1.0
+
+metrics:
+  primary: pr_auc
+  names: []
+  alert_rates: []
+
+analysis:
+  permutation_importance: true
+  permutation_repeats: 10
+  permutation_max_rows: 50000
+  error_sample_size: 25
+  learning_curves: true
+  learning_curve_metric: logloss   # logloss, aucpr, auc or error
+  learning_curve_rounds: null      # null = twice each fold's best round
+
+fitted_features:
+  - step: group_statistics
+    group_by: [type]
+    columns: [torque_nm, tool_wear_min]
+    stats: [mean, std]
+    deviation: true
+    min_group_size: 30
+  # Monotone per column, so no effect on tree splits; shown for syntax and non-tree models.
+  # - {step: power_transform, columns: [tool_wear_min], method: yeo-johnson}
+
+model_file: configs/model/xgb2.yaml
