@@ -1,16 +1,4 @@
-# %%
-"""Probability calibration for a trained XGBoost run.
-
-A monotone remap (Platt by default, isotonic optional) fit on the parent run's
-OOF predictions ONLY, then applied to the holdout. Calibration repairs the
-score scale distorted by scale_pos_weight: Brier drops, thresholds become
-interpretable probabilities. It cannot change the ranking — PR-AUC/ROC-AUC
-are invariant by construction (asserted below on every run).
-
-Creates its own run folder with parent_run recorded — a derived-experiment
-demo for the tracking registry. Requires the parent run to contain
-oof_xgb1.npy and p_hold.npy.
-"""
+"""Post-selection OOF calibration. Never loads holdout predictions or labels."""
 
 from __future__ import annotations
 
@@ -19,209 +7,137 @@ import json
 import logging
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")  # headless: save figures, never plt.show()
-import joblib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from sklearn.calibration import calibration_curve
-from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import (
-    average_precision_score,
-    brier_score_loss,
-    roc_auc_score,
-)
 
-from ml_template.data import runs, schema
-from ml_template.data.extract import extract
-from ml_template.data.validate import ensure_is_fail
-from ml_template.db.connection import get_engine
-from ml_template.paths import ARTIFACTS, LOGS
-from ml_template.tracking.utils import setup_logging
+from ml_template.evaluation.calibration_diagnostics import (
+    cross_fitted_probabilities,
+    probability_metrics,
+    reliability_table,
+)
+from ml_template.models.probability_calibrator import ProbabilityCalibrator
+from ml_template.training.calibration_config import load_calibration_config
+from ml_template.training.calibration_inputs import load_calibration_inputs
 
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------- cli
+def calibrate_run(engine, cfg, *, output_root=None, check_only=False):
+    from ml_template.db import calibration_registry, model_run_registry
+    from ml_template.paths import ARTIFACTS
+    from ml_template.tracking import run_artifacts
+    from ml_template.tracking.git_state import git_state
 
-
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Calibrate a trained run's probabilities")
-    p.add_argument(
-        "--run-id", default=None, help="parent training run folder; default = latest *_xgb_* run"
-    )
-    p.add_argument(
-        "--method",
-        choices=["platt", "isotonic"],
-        default="platt",
-        help="platt is the stabler choice at ~90 OOF positives",
-    )
-    p.add_argument("--note", default="")
-    return p.parse_args(argv)
-
-
-# ---------------------------------------------------------------- data
-
-
-def find_run(run_id: str | None) -> Path:
-    runs_root = ARTIFACTS / "runs"
-    if run_id is not None:
-        run = runs_root / run_id
-        if not run.is_dir():
-            raise FileNotFoundError(f"no run named {run_id} in {runs_root}")
-        return run
-    candidates = [
-        r
-        for r in sorted(runs_root.iterdir())
-        if r.is_dir() and (r / "oof_xgb1.npy").exists() and (r / "p_hold.npy").exists()
-    ]
-    if not candidates:
-        raise FileNotFoundError(
-            f"no calibratable runs (oof_xgb1.npy + p_hold.npy) under {runs_root}"
+    inputs = load_calibration_inputs(engine, cfg.parent_run_id)
+    frame = inputs.frame
+    counts = np.bincount(frame["y_true"].to_numpy(dtype=int), minlength=2)
+    if counts.min() < cfg.min_class_count:
+        raise ValueError(f"insufficient class counts for calibration: {counts.tolist()}")
+    if check_only:
+        return {
+            "parent_run_id": cfg.parent_run_id,
+            "n_rows": len(frame),
+            "class_counts": counts.tolist(),
+            "provenance": inputs.provenance,
+        }
+    if inputs.provenance["parent_holdout_evaluated_at"]:
+        logger.warning(
+            "Parent holdout was already evaluated; this cannot undo earlier selection exposure"
         )
-    return candidates[-1]
-
-
-def load_labels_from_run(run_dir: Path) -> tuple[pd.DataFrame, dict]:
-    """(wafer_id, is_fail) in canonical order, plus the run's splits.json."""
-    splits_path = run_dir / "splits.json"
-    assert splits_path.exists(), f"no splits.json in {run_dir} — rerun train_xgb"
-    splits = json.loads(splits_path.read_text())
-
-    engine = get_engine()
-    df = extract(engine).sort_values([schema.TIME_COL, schema.KEY_COL]).reset_index(drop=True)
-    df = ensure_is_fail(df, engine)
-    return df[[schema.KEY_COL, "is_fail"]], splits
-
-
-def load_parent(run: Path):
-    """OOF scores + holdout scores + labels, id-aligned.
-
-    The parent's p_hold.parquet is the source of truth for id<->score
-    pairing (pairing by construction). Legacy runs fall back to bare .npy
-    + positional splits.json — tie-hazard on duplicated timestamps.
-    """
-    oof = np.load(run / "oof_xgb1.npy")  # (repeats, n_cv)
-    lab, splits = load_labels_from_run(run)
-
-    cv = lab.iloc[np.asarray(splits["train_index"])]
-    y_cv, ids_cv = cv["is_fail"], cv[schema.KEY_COL]
-    assert len(y_cv) == oof.shape[-1], f"label/OOF mismatch: {len(y_cv)} vs {oof.shape[-1]}"
-
-    keyed = run / "p_hold.parquet"
-    if keyed.exists():
-        ref = pd.read_parquet(keyed)  # wafer_id, timestamp, p_hold
-        p_hold = ref["p_hold"].to_numpy()
-        ids_hold = ref[schema.KEY_COL]
-        y_hold = ref[[schema.KEY_COL]].merge(lab, on=schema.KEY_COL, how="left")["is_fail"]
-        assert y_hold.notna().all(), "holdout ids missing from labels"
-        legacy = np.load(run / "p_hold.npy")
-        assert np.allclose(legacy, p_hold), "p_hold.parquet disagrees with p_hold.npy"
-    else:
-        hold = lab.iloc[np.asarray(splits["holdout_index"])]
-        y_hold, ids_hold = hold["is_fail"], hold[schema.KEY_COL]
-        p_hold = np.load(run / "p_hold.npy")
-
-    assert len(y_hold) == len(p_hold), (
-        f"holdout label/pred mismatch: {len(y_hold)} vs {len(p_hold)}"
+    calibration_id = model_run_registry.new_run_id("cal")
+    out = Path(output_root or ARTIFACTS / "calibration") / calibration_id
+    out.mkdir(parents=True, exist_ok=False)
+    calibration_registry.start_calibration(
+        engine,
+        calibration_id,
+        cfg.parent_run_id,
+        cfg.method,
+        cfg.model_dump(mode="json"),
+        run_artifacts.relative_to_root(out),
     )
-
-    expected = splits.get("n_train_fails")  # present on new runs only
-    if expected is not None:
-        assert int(y_cv.sum()) == expected, f"CV fails {int(y_cv.sum())} != recorded {expected}"
-
-    return oof.mean(axis=0), y_cv, p_hold, y_hold, ids_cv, ids_hold
-
-
-# ---------------------------------------------------------------- calibration
-
-
-def fit_calibrator(method: str, scores: np.ndarray, y: np.ndarray):
-    if method == "platt":
-        return LogisticRegression().fit(scores.reshape(-1, 1), y)
-    return IsotonicRegression(out_of_bounds="clip").fit(scores, y)
-
-
-def predict_calibrated(cal, method: str, scores) -> np.ndarray:
-    s = np.asarray(scores, dtype=float)
-    if method == "platt":
-        return cal.predict_proba(s.reshape(-1, 1))[:, 1]
-    return cal.predict(s)
-
-
-def save_reliability(y, p_raw, p_cal, out: Path, label: str) -> None:
-    fig, ax = plt.subplots(figsize=(5, 5))
-    for p, lb, c in [(p_raw, "raw", "tab:red"), (p_cal, "calibrated", "tab:blue")]:
-        frac, mean_pred = calibration_curve(y, p, n_bins=10, strategy="quantile")
-        ax.plot(mean_pred, frac, "o-", ms=4, lw=1.2, color=c, label=lb)
-    ax.plot([0, 1], [0, 1], "k--", lw=1, label="perfect")
-    ax.set(
-        xlabel="mean predicted probability",
-        ylabel="observed fail fraction",
-        title=f"Reliability — {label}",
-    )
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    fig.savefig(out, dpi=180)
-    plt.close(fig)
-
-
-# ---------------------------------------------------------------- main
+    try:
+        settings = {"method": cfg.method, "epsilon": cfg.epsilon, "l2": cfg.l2}
+        p_raw = frame["p_raw"].to_numpy()
+        y = frame["y_true"].to_numpy()
+        p_crossfit = cross_fitted_probabilities(
+            p_raw, y, frame["fold"].to_numpy(), min_class_count=cfg.min_class_count, **settings
+        )
+        calibrator = ProbabilityCalibrator.fit(p_raw, y, **settings)
+        calibrator.save(out / "calibrator.json")
+        predictions = frame.copy()
+        predictions["p_cal_crossfit"] = p_crossfit
+        predictions["p_cal_fit"] = calibrator.transform(p_raw)
+        predictions.to_parquet(out / "development_predictions.parquet", index=False)
+        rows = []
+        reliability = []
+        masks = [(-1, np.ones(len(frame), dtype=bool))]
+        masks += [(int(k), frame["fold"].eq(k).to_numpy()) for k in sorted(frame["fold"].unique())]
+        for variant, p in [("raw", p_raw), ("calibrated_crossfit", p_crossfit)]:
+            for fold, mask in masks:
+                for metric, value in probability_metrics(y[mask], p[mask]).items():
+                    rows.append(
+                        {
+                            "split": "dev_calibration_diagnostic",
+                            "variant": variant,
+                            "fold": fold,
+                            "metric": metric,
+                            "value": value,
+                        }
+                    )
+            table = reliability_table(y, p, cfg.reliability_bins)
+            table.insert(0, "variant", variant)
+            reliability.append(table)
+        pd.DataFrame(rows).to_csv(out / "metrics.csv", index=False)
+        pd.concat(reliability, ignore_index=True).to_csv(out / "reliability.csv", index=False)
+        run_artifacts.write_json(out / "config.json", cfg.model_dump(mode="json"))
+        run_artifacts.write_json(out / "provenance.json", inputs.provenance)
+        run_artifacts.write_json(out / "environment.json", run_artifacts.environment_info())
+        run_artifacts.write_json(out / "git_state.json", git_state())
+        run_artifacts.write_json(
+            out / "diagnostic_notes.json",
+            {
+                "assessment": "exploratory cross-fitting of stored OOF score-label pairs; not nested CV",
+                "p_cal_fit": "fitted on all OOF pairs; in-sample for calibrator; not assessment evidence",
+                "p_cal_crossfit": "each row excluded from its calibrator fit; not independent of base-model selection",
+                "method": "positive-slope sigmoid on clipped probability logit; weak L2 penalty on slope",
+                "ranking": "final calibrator is nondecreasing; clipping/numerics may create ties; fold-specific diagnostic maps can reorder pooled rows",
+                "reliability_intervals": "pointwise Wilson intervals assuming independent Bernoulli rows; exploratory, not simultaneous",
+                "holdout": "no holdout predictions or labels loaded; file hashing reads bytes for integrity only",
+                "warning_slope_at_floor": calibrator.slope <= 1.1e-8,
+            },
+        )
+        run_artifacts.write_artifact_manifest(out)
+        calibration_registry.finish_calibration(engine, calibration_id, succeeded=True, rows=rows)
+    except Exception as exc:
+        calibration_registry.finish_calibration(
+            engine, calibration_id, succeeded=False, error=f"{type(exc).__name__}: {exc}"[:2000]
+        )
+        raise
+    return {
+        "calibration_id": calibration_id,
+        "parent_run_id": cfg.parent_run_id,
+        "artifact_dir": str(out),
+        "status": "succeeded",
+    }
 
 
 def main(argv=None):
-    args = parse_args(argv)
-    setup_logging(logfile=LOGS / "ml.log")
+    from ml_template.db.connection import get_engine
+    from ml_template.tracking.pipeline_logging import setup_logging
 
-    parent = find_run(args.run_id)
-    oof_mean, y_cv, p_hold_raw, y_hold, ids_cv, ids_hold = load_parent(parent)
-    logger.info(f"[calibrate] parent={parent.name} method={args.method}")
-
-    cal = fit_calibrator(args.method, oof_mean, y_cv)
-    oof_cal = predict_calibrated(cal, args.method, oof_mean)
-    p_hold_cal = predict_calibrated(cal, args.method, p_hold_raw)
-
-    # calibration is monotone: ranking metrics must be invariant
-    assert np.isclose(roc_auc_score(y_hold, p_hold_raw), roc_auc_score(y_hold, p_hold_cal))
-
-    metrics = {
-        "type": "calibration",
-        "parent_run": parent.name,
-        "method": args.method,
-        "brier_oof_raw": round(float(brier_score_loss(y_cv, oof_mean)), 4),
-        "brier_oof_cal": round(float(brier_score_loss(y_cv, oof_cal)), 4),
-        "brier_holdout_raw": round(float(brier_score_loss(y_hold, p_hold_raw)), 4),
-        "brier_holdout_cal": round(float(brier_score_loss(y_hold, p_hold_cal)), 4),
-        "holdout_aucpr": round(float(average_precision_score(y_hold, p_hold_cal)), 4),
-    }
-
-    parent_slug = parent.name.split("_", 2)[-1]  # "sel_g025" from "20260829_085633_sel_g025"
-    run_dir, meta = runs.make_run(
-        config={"script": "calibrate", "method": args.method, "parent_run": parent.name},
-        run_name=f"cal-{args.method}__{parent_slug}",
-        note=args.note,
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="validate parent inputs without fitting or new calibration records",
     )
-    logger.info(f"run {run_dir.name} | git {meta['git_sha']}")
-
-    joblib.dump(cal, run_dir / f"calibrator_{args.method}.joblib")
-    np.save(run_dir / "oof_cal.npy", oof_cal)
-    np.save(run_dir / "p_hold_cal.npy", p_hold_cal)
-    pd.DataFrame({schema.KEY_COL: ids_cv.to_numpy(), "p_oof_cal": oof_cal}).to_parquet(
-        run_dir / "oof_cal.parquet", index=False
+    args = parser.parse_args(argv)
+    setup_logging()
+    result = calibrate_run(
+        get_engine(), load_calibration_config(args.config), check_only=args.check
     )
-    pd.DataFrame({schema.KEY_COL: ids_hold.to_numpy(), "p_hold_cal": p_hold_cal}).to_parquet(
-        run_dir / "p_hold_cal.parquet", index=False
-    )
-    pd.DataFrame([metrics]).to_csv(run_dir / "calibration_metrics.csv", index=False)
-    save_reliability(y_cv, oof_mean, oof_cal, run_dir / "reliability_oof.png", "OOF")
-    save_reliability(y_hold, p_hold_raw, p_hold_cal, run_dir / "reliability_holdout.png", "holdout")
-    runs.append_index(run_dir, metrics)
-
-    logger.info(f"[calibrate] {metrics}")
-    logger.info(f"[calibrate] done | artifacts -> {run_dir}")
+    print(json.dumps(result, indent=2, default=str))
 
 
 if __name__ == "__main__":

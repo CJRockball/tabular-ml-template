@@ -1,0 +1,18 @@
+{
+  "repository": "CJRockball/tabular-ml-template",
+  "ref_inspected": "refs/heads/main",
+  "inspection_date": "2026-10-17",
+  "target_parent_run": "run_20261016_121745_958bec",
+  "note": "Per-file Git blob SHAs returned by the GitHub connector; not a single pinned repository commit.",
+  "files": {
+    "src/ml_template/training/run_inputs.py": "7117f277f470643c48168d098809f5d87afebca8",
+    "src/ml_template/db/model_run_registry.py": "3fe0e0ac653eafdfd07dc7e9c21d221e6fc55d53",
+    "src/ml_template/tracking/run_artifacts.py": "e41c02e112a665d438e40954fb62267ae5326d59",
+    "src/ml_template/data/silver_loader.py": "e585b909039728a6d19da3d8eb7c27b584884d10",
+    "src/ml_template/training/split.py": "44459fce0f0d60b2024e3516a0df1758d95213e5",
+    "src/ml_template/training/run_config.py": "2b84a7f6500d0ba55c59d822bb44769e45aba0c9",
+    "src/ml_template/features/fitted_features.py": "767f290e96f0cfa2b8a897531845137dddccf54d",
+    "src/ml_template/paths.py": "1bac258ac7739b43dbbcf7636eea464684be6ea2",
+    "pyproject.toml": "e400de2b821a6d60edf6e85c8035d959697dfec7"
+  }
+}
