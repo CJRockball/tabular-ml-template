@@ -1,5 +1,0 @@
-# Five seeds on the fe1 feature set. Compare with base_noise (mean 0.7072, std 0.0288).
-base: configs/experiment/fe1_all_phys_sel_no_noise.yaml
-experiment_name: fe1_all_phys_sel_no_noise
-grid:
-  seed: [1, 2, 3, 4, 5]

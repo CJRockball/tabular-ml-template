@@ -51,12 +51,15 @@ logs/*
 /data/raw/*
 !/data/raw/.gitignore
 # Don't commit all the training configs
-/config/experiment/*
-!/config/experiment/.gitignore
-/config/features/*
-!/config/features/.gitignore
-/config/sweep/*
-!/config/sweep/.gitignore
+/configs/experiment/*
+!/configs/experiment/.gitignore
+!/configs/experiment/xgb_baseline.yaml
+/configs/features/*
+!/configs/features/.gitignore
+/configs/sweep/*
+!/configs/sweep/.gitignore
+!/configs/ai4i_binary.yaml
+!/configs/sweep/xgb_grid.yaml
 # --- Don't upload unnecessary files ---
 # Notebooks
 notebooks/*
