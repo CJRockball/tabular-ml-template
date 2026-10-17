@@ -1,4 +1,4 @@
-"""Five-tab read-only modelling dashboard."""
+"""Six-tab read-only modelling dashboard."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from sqlalchemy import Engine
 
 from ml_template.dashboard.pages import (
     assets_page,
+    calibration_page,
     compare_page,
     experiment_page,
     run_page,
@@ -35,6 +36,7 @@ def create_app(engine: Engine | None = None) -> Dash:
                         dcc.Tab(label="Experiments", value="experiments"),
                         dcc.Tab(label="Single run", value="run"),
                         dcc.Tab(label="Compare", value="compare"),
+                        dcc.Tab(label="Calibration", value="calibration"),
                     ],
                 ),
                 html.Div(run_page.layout(engine), id="single-run-container"),
@@ -52,11 +54,23 @@ def create_app(engine: Engine | None = None) -> Dash:
                 html.Div(
                     compare_page.layout(engine), id="compare-container", style={"display": "none"}
                 ),
+                html.Div(
+                    calibration_page.layout(engine),
+                    id="calibration-container",
+                    style={"display": "none"},
+                ),
             ]
         )
 
     app.layout = layout
-    for page in (run_page, experiment_page, assets_page, sweeps_page, compare_page):
+    for page in (
+        run_page,
+        experiment_page,
+        assets_page,
+        sweeps_page,
+        compare_page,
+        calibration_page,
+    ):
         page.register_callbacks(app, engine)
 
     @app.callback(
@@ -65,12 +79,13 @@ def create_app(engine: Engine | None = None) -> Dash:
         Output("assets-container", "style"),
         Output("sweeps-container", "style"),
         Output("compare-container", "style"),
+        Output("calibration-container", "style"),
         Input("dashboard-tab", "value"),
     )
     def _tab(value):
         return tuple(
             {} if value == name else {"display": "none"}
-            for name in ("run", "experiments", "assets", "sweeps", "compare")
+            for name in ("run", "experiments", "assets", "sweeps", "compare", "calibration")
         )
 
     return app
