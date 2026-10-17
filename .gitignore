@@ -59,6 +59,7 @@ logs/*
 /configs/sweep/*
 !/configs/sweep/.gitignore
 !/configs/ai4i_binary.yaml
+!/configs/sweep/xgb_grid.yaml
 # --- Don't upload unnecessary files ---
 # Notebooks
 notebooks/*
