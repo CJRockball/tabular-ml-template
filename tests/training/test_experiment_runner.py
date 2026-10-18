@@ -250,27 +250,32 @@ def test_failure_is_recorded_and_sweep_continues(world):
     assert stopped["run_ids"] == []
 
 
-def test_holdout_is_evaluated_once_unless_forced(world):
+def test_holdout_evaluation_is_immutable_and_cached(world):
+    from pathlib import Path
+
+    from ml_template.db import evaluation_registry
+    from ml_template.evaluation.evaluate_run import evaluate_spec
+    from ml_template.evaluation.evaluation_config import EvaluationConfig
+
     cfg, engine, kwargs, tmp_path = world
     run_id = er.run_experiment([cfg], engine, kind="single", **kwargs)["run_ids"][0]
     roots = {"silver_root": kwargs["silver_root"], "split_root": kwargs["split_root"]}
-    first = evaluate_holdout(engine, run_id, adapter_loader=fake_loader, **roots)
-    for name in (
-        "pr_auc",
-        "roc_auc",
-        "recall_at_5pct",
-        "precision_at_10pct",
-        "base_rate",
-        "n_rows",
-    ):
-        assert name in first, name
-    assert first["n_rows"] == 240  # 20% of 1200
-    assert reg.get_run(engine, run_id)["holdout_evaluated_at"]
-    assert (tmp_path / "runs" / run_id / "holdout_predictions.parquet").exists()
-    again = evaluate_holdout(engine, run_id, adapter_loader=None, **roots)
-    assert again == first
-    forced = evaluate_holdout(engine, run_id, force=True, adapter_loader=fake_loader, **roots)
-    assert forced.keys() == first.keys()
+    spec = EvaluationConfig(parent_run_id=run_id, uncertainty={"enabled": False})
+    checked = evaluate_spec(engine, spec, check_only=True, **roots)
+    assert checked["holdout_labels_loaded"] is False and checked["n_holdout_rows"] == 240
+    assert reg.get_run(engine, run_id)["holdout_evaluated_at"] is None
+    first = evaluate_spec(
+        engine, spec, adapter_loader=fake_loader, output_root=tmp_path / "evaluations", **roots
+    )
+    assert first["summary"]["n_rows"] == 240
+    record = evaluation_registry.get_evaluation(engine, first["evaluation_id"])
+    assert (Path(record["artifact_dir"]) / "holdout_predictions.parquet").exists()
+    assert not (tmp_path / "runs" / run_id / "holdout_predictions.parquet").exists()
+    assert reg.get_metrics(engine, run_id, split="holdout") == []
+    again = evaluate_spec(engine, spec, **roots)
+    assert again["cached"] and again["evaluation_id"] == first["evaluation_id"]
+    with pytest.raises(ValueError, match="retired"):
+        evaluate_holdout(engine, run_id, force=True, **roots)
 
 
 def test_holdout_refuses_failed_runs_and_tampered_models(world):

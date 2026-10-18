@@ -6,9 +6,12 @@ EXP    ?= configs/experiment/xgb_baseline.yaml
 SWEEP  ?= configs/sweep/xgb_grid.yaml
 RUN    := uv run python
 CALIBRATION_CONFIG ?= configs/calibration/test_958bec.yaml
+EVALUATION_CONFIG ?= configs/evaluation/test_958bec.yaml
 
 .PHONY: ingest eda silver split features train sweep evaluate pipeline 
 		clean rebuild check dashboard calibrate calibrate-check calibration-tests
+		evaluate-check evaluate evaluation-tests
+
 
 ingest:
 	$(RUN) -m $(PKG).data.ingest --data_file $(CONFIG) --dataset_version_id $(DS)
@@ -26,8 +29,6 @@ train:
 	$(RUN) -m $(PKG).training.train_model --config $(EXP)
 sweep:
 	$(RUN) -m $(PKG).training.train_model --sweep $(SWEEP)
-evaluate:
-	$(RUN) -m $(PKG).evaluation.evaluate_run --run-id $(RUN_ID)
 dashboard:
 	$(RUN) -m $(PKG).dashboard.app
 calibrate:
@@ -36,6 +37,12 @@ calibrate-check:
 	$(RUN) -m $(PKG).training.calibrate --config $(CALIBRATION_CONFIG) --check
 calibration-tests:
 	$(RUN) -m pytest -q tests/test_probability_calibrator.py tests/test_calibration_*.py
+evaluate-check:
+	$(RUN) -m $(PKG).evaluation.evaluate_run --config $(EVALUATION_CONFIG) --check
+evaluate:
+	$(RUN) -m $(PKG).evaluation.evaluate_run --config $(EVALUATION_CONFIG) --execute
+evaluation-tests:
+	$(RUN) -m pytest -q tests/evaluation/test_final_evaluation_*.py tests/dashboard/test_final_evaluation_*.py
 
 pipeline: ingest eda silver split train
 rebuild: clean pipeline
