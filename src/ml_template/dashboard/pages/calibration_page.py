@@ -9,6 +9,7 @@ from dash import Dash, Input, Output, State, dcc, html
 from ml_template.dashboard import calibration_data as cd
 from ml_template.dashboard import calibration_figs as cf
 from ml_template.dashboard.inventory_common import grid
+from ml_template.dashboard.threshold_panels import render_threshold_panel
 
 P = "calibration-"
 STYLE = {"maxWidth": "1400px", "margin": "auto", "padding": "16px", "fontFamily": "sans-serif"}
@@ -27,7 +28,7 @@ def layout(engine):
         [
             html.H2("Calibration"),
             html.P(
-                "Read-only development diagnostics. No model fitting, threshold selection or holdout evaluation."
+                "Read-only development diagnostics and exploratory threshold estimates. No policy freezing or holdout evaluation."
             ),
             html.Button("Refresh saved calibrations", id=P + "refresh", n_clicks=0),
             html.Label("Parent model run"),
@@ -46,13 +47,25 @@ def layout(engine):
                 value="brier",
                 clearable=False,
             ),
+            html.H3("Threshold diagnostics"),
+            html.Label("Score variant (cutoffs are not interchangeable)"),
+            dcc.Dropdown(id=P + "threshold-variant",
+                         options=[{"label": "Raw OOF", "value": "raw"},
+                                  {"label": "Calibrated cross-fit", "value": "calibrated_crossfit"}],
+                         value="calibrated_crossfit", clearable=False),
+            html.Label("Exploratory cutoff for the selected score variant"),
+            dcc.Input(id=P + "threshold", type="number", min=0, max=1,
+                      step="any", value=0.1),
+            html.Label("Alert budget (fraction of development rows)"),
+            dcc.Input(id=P + "budget", type="number", min=0.000001, max=1,
+                      step=0.01, value=0.05),
             html.Div(id=P + "body"),
         ],
         style=STYLE,
     )
 
 
-def build_view(bundle, metric="brier"):
+def build_view(bundle, metric="brier", score_variant="calibrated_crossfit", threshold=0.1, budget=0.05):
     comparison = cd.metric_comparison(bundle["metrics"])
     distributions = cd.distribution_table(bundle["predictions"])
     summary = (
@@ -62,6 +75,7 @@ def build_view(bundle, metric="brier"):
         if not comparison.empty
         else comparison
     )
+    threshold_frames, threshold_metadata = cd.threshold_inputs(bundle, score_variant)
     return html.Div(
         [
             html.Div(
@@ -101,6 +115,10 @@ def build_view(bundle, metric="brier"):
             ),
             dcc.Graph(figure=cf.distribution_fig(distributions)),
             dcc.Graph(figure=cf.mapping_fig(bundle["calibrator"])),
+            html.H3("Estimated thresholds on the selected development score scale"),
+            render_threshold_panel(threshold_frames, threshold, budget, metadata=threshold_metadata),
+            html.P("To freeze a policy, use the explicit policy_selection CLI after reviewing the objective, "
+                   "workload, ties and score-scale transfer. This page never writes a policy."),
             html.H3("Saved settings and final parameters"),
             html.Pre(
                 json.dumps(
@@ -169,15 +187,22 @@ def register_callbacks(app: Dash, engine):
         Input(P + "id", "value"),
         Input(P + "parent", "value"),
         Input(P + "metric", "value"),
+        Input(P + "threshold-variant", "value"),
+        Input(P + "threshold", "value"),
+        Input(P + "budget", "value"),
         Input(P + "refresh", "n_clicks"),
     )
-    def _body(calibration_id, parent, metric, _clicks):
+    def _body(calibration_id, parent, metric, score_variant, threshold, budget, _clicks):
         if not calibration_id:
             return html.P("No calibration selected. Run calibration from the CLI, then refresh.")
         try:
             bundle = cd.load_calibration(engine, calibration_id)
             if bundle["header"]["parent_run_id"] != parent:
                 return html.P("Choose a calibration for the selected parent run.")
-            return build_view(bundle, metric or "brier")
+            if threshold is None or not 0 <= threshold <= 1 or budget is None or not 0 < budget <= 1:
+                return html.P("Use a cutoff in [0,1] and an alert budget in (0,1].")
+            return build_view(bundle, metric or "brier", score_variant or "calibrated_crossfit", threshold, budget)
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return html.Pre(f"Calibration diagnostics unavailable: {exc}")
+
+# calibrated-policy update v1

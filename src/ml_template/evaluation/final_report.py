@@ -34,6 +34,8 @@ def render_report(data, output_dir):
         ("Metrics; pr_auc means average precision", data["metrics"]),
         ("Calibrated minus raw", data["differences"]),
         ("Frozen policy", data["policy_results"]),
+        ("Development policy-selection provenance (exploratory)",
+         [data["policy_selection"]] if data.get("policy_selection") else []),
         ("Reliability support", data["reliability"]),
         ("Subgroups: global policy, exploratory", data["subgroups"]),
         ("Policy errors", data["errors"]),
@@ -63,6 +65,11 @@ def render_report(data, output_dir):
         f"|{r['variant']}|{r['metric']}|{r['value']}|[{r.get('ci_low')}, {r.get('ci_high')}]|"
         for r in data["metrics"]
     ]
+    lines += ["", "## Frozen policy", ""]
+    lines += ["- " + html.escape(str(row)) for row in data["policy_results"]]
+    if data.get("policy_selection"):
+        lines += ["", "## Development policy-selection provenance (exploratory)", "",
+                  html.escape(str(data["policy_selection"]))]
     lines += ["", "## Warnings", ""] + [
         "- " + html.escape(str(w)).replace("\n", " ") for w in data["warnings"]
     ]
@@ -91,3 +98,5 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
+# calibrated-policy update v1

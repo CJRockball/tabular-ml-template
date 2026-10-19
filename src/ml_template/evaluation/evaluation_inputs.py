@@ -161,6 +161,12 @@ def prepare_evaluation(engine, spec, *, silver_root=None, split_root=None, featu
             "expected_split_id": parent["split_id"],
         }
     )
+    if spec.policy.selection is not None:
+        from ml_template.evaluation.policy_selection import validate_policy_selection
+
+        selection = validate_policy_selection(spec, provenance, caldir)
+        provenance["policy_selection"] = selection
+        hashes["policy_selection"] = spec.policy.selection.artifact_sha256
     for s in spec.slices:
         if s.column not in info["features"] or s.column in [key, target]:
             raise ValueError("slices must use saved input features")
@@ -239,3 +245,5 @@ def exposure_warnings(engine, prepared):
         if r["silver_dataset_version_id"] == silver and r.get("holdout_evaluated_at")
     )
     return warnings
+
+# calibrated-policy update v1

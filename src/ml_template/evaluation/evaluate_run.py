@@ -245,6 +245,7 @@ def evaluate_spec(
                 "warnings": warnings,
                 "metrics": metrics,
                 "differences": differences,
+                "policy_selection": p.provenance.get("policy_selection"),
                 "policy_results": []
                 if flags is None
                 else [
@@ -252,6 +253,8 @@ def evaluate_spec(
                         "variant": cfg.release_variant,
                         "kind": cfg.policy.kind,
                         "value": cfg.policy.value,
+                        "source": cfg.policy.source,
+                        "batch_definition": cfg.policy.batch_definition,
                         **policy_metrics(y, flags),
                     }
                 ],
@@ -348,3 +351,5 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
+
+# calibrated-policy update v1

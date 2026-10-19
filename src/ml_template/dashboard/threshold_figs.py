@@ -11,7 +11,7 @@ def _base(fig, title, ylabel):
         template="plotly_white",
         height=370,
         title=title,
-        xaxis_title="Stored OOF score cutoff (p >= cutoff)",
+        xaxis_title="Named development score cutoff (p >= cutoff)",
         yaxis_title=ylabel,
     )
     return fig
@@ -87,3 +87,5 @@ def fold_optima(table: pd.DataFrame):
         title="Fold sensitivity — not independent validation or confidence intervals",
     )
     return fig
+
+# calibrated-policy update v1

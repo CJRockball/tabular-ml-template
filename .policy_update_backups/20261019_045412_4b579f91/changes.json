@@ -1,0 +1,65 @@
+{
+  "repo": "/home/python_user/coding/ds/tabular-ml-template",
+  "files": {
+    "src/ml_template/evaluation/evaluation_config.py": {
+      "before": "a12aaef776cb6b2f1c6bb25e4813788ee1d44471fd0b4cdda8eddedf325d997a",
+      "after": "4a336c4e16c609cd45935f74f51b91579174aa789155d7da438b99460fbab8a3"
+    },
+    "src/ml_template/evaluation/evaluation_inputs.py": {
+      "before": "89a18fb46681f787cc33cd7ee105272f448c972355eb323c1a2330f6386b7094",
+      "after": "bf8bab410860c180fd1f7bbc9f59e153a166157d67e08eae1ca973a6ce6569d5"
+    },
+    "src/ml_template/evaluation/decision_policy.py": {
+      "before": "f49881efa10366d7594ac280e3317d704502f13dbe4b2496ac71aa7936f389cd",
+      "after": "217346b97e97a582c00ef85aef5a1914e63193fe0e389b51bdf4ef8c3052e37f"
+    },
+    "src/ml_template/evaluation/evaluate_run.py": {
+      "before": "3d24db70b03b8125222a9fa6e9e4fce8c5484054bf18a371bbe717e98c75f27d",
+      "after": "649b6fa944b270fbfbb4678d0d358756a4c757c3f38fc41e97b5babc032e435d"
+    },
+    "src/ml_template/evaluation/final_report.py": {
+      "before": "1b85a4cd4f5e55934f97e66158e09299b946511996c7febec7243937432f0133",
+      "after": "a00784acc511e78b3257a7db8b870cdb70ca5020b51a45d42d6ddedd78c6948e"
+    },
+    "src/ml_template/dashboard/pages/evaluation_page.py": {
+      "before": "ab2f3b5b741c4a466a7841983d97d7ab711583c4c1e56b69607a61247943b170",
+      "after": "0c84e812105bd893568504c13b629b04cae82938bd4b26d5ad83a1b947cb6243"
+    },
+    "src/ml_template/dashboard/calibration_data.py": {
+      "before": "e627635a03a1a2d3b8cc11e8d740bc2da885b7d060bfcd917c9ce410fb3801c4",
+      "after": "90c0ccc46400bab80b91dd1dcbcd4760f9539ee28c70b70d2631bbef449e8ee1"
+    },
+    "src/ml_template/dashboard/threshold_panels.py": {
+      "before": "08f44061fe125addd97fb387d526be2d717fc0b507a9a77a16a03ad17a05e98b",
+      "after": "0879538c6e7874c5676bdda77c52fa2f1d0887df3e7e034c95e60a20e77cd5c6"
+    },
+    "src/ml_template/dashboard/threshold_figs.py": {
+      "before": "61d598de6450a17400c8e1faede36edb11840b8a8f9fd27ac1d11840ca9307d1",
+      "after": "b215bc28d4d87a90a8fd913ee9b4efa8f5bd5007bf39e89f14859ef7243353b7"
+    },
+    "src/ml_template/dashboard/pages/calibration_page.py": {
+      "before": "1183c3fe75af31d7ef30b3d67a8863891d1d69e0083f23d50332aeb04ca73c09",
+      "after": "5c5d0ee06d347302b825bd3a78f931973a12e780c967db44c3538b891f602cda"
+    },
+    "src/ml_template/evaluation/policy_selection.py": {
+      "before": null,
+      "after": "fa07fb06689961a98d16d440749a4c71b433107892f9b66699eb2b727f8ae541"
+    },
+    "tests/evaluation/test_policy_selection.py": {
+      "before": null,
+      "after": "11c42a0f4df153e0b30cdb44b77ab7c5ca6eca31ac649cd7677baa13b36218b4"
+    },
+    "tests/evaluation/test_policy_selection_preflight.py": {
+      "before": null,
+      "after": "b5f0bad4a008af3c5f197494fab5101c93bbe8e7635925d681637d5728c76670"
+    },
+    "tests/dashboard/test_calibrated_thresholds.py": {
+      "before": null,
+      "after": "6bbe25a70f4651bed96feb9c005c698b40bf554f23b4755591c8bcd3148ad790"
+    },
+    "docs/calibrated_threshold_policy.md": {
+      "before": null,
+      "after": "a80a6bb2fdea69210e769f20d0046e58e74762e549931c66c1385dbfd53559bf"
+    }
+  }
+}
