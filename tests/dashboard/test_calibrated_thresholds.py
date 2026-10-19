@@ -5,11 +5,20 @@ cd = pytest.importorskip("ml_template.dashboard.calibration_data")
 
 
 def bundle():
-    return {"header": {"parent_run_id": "run_test", "calibration_id": "cal_test"},
-            "provenance": {"key_col": "udi"},
-            "predictions": pd.DataFrame({"udi": [3, 1, 2], "fold": [0, 0, 1], "y_true": [1, 0, 0],
-                                          "p_raw": [0.8, 0.2, 0.4], "p_cal_crossfit": [0.6, 0.01, 0.1],
-                                          "p_cal_fit": [0.9, 0, 0.02]})}
+    return {
+        "header": {"parent_run_id": "run_test", "calibration_id": "cal_test"},
+        "provenance": {"key_col": "udi"},
+        "predictions": pd.DataFrame(
+            {
+                "udi": [3, 1, 2],
+                "fold": [0, 0, 1],
+                "y_true": [1, 0, 0],
+                "p_raw": [0.8, 0.2, 0.4],
+                "p_cal_crossfit": [0.6, 0.01, 0.1],
+                "p_cal_fit": [0.9, 0, 0.02],
+            }
+        ),
+    }
 
 
 def test_calibrated_adapter_sorts_and_excludes_fit_scores():

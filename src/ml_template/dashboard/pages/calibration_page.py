@@ -49,23 +49,28 @@ def layout(engine):
             ),
             html.H3("Threshold diagnostics"),
             html.Label("Score variant (cutoffs are not interchangeable)"),
-            dcc.Dropdown(id=P + "threshold-variant",
-                         options=[{"label": "Raw OOF", "value": "raw"},
-                                  {"label": "Calibrated cross-fit", "value": "calibrated_crossfit"}],
-                         value="calibrated_crossfit", clearable=False),
+            dcc.Dropdown(
+                id=P + "threshold-variant",
+                options=[
+                    {"label": "Raw OOF", "value": "raw"},
+                    {"label": "Calibrated cross-fit", "value": "calibrated_crossfit"},
+                ],
+                value="calibrated_crossfit",
+                clearable=False,
+            ),
             html.Label("Exploratory cutoff for the selected score variant"),
-            dcc.Input(id=P + "threshold", type="number", min=0, max=1,
-                      step="any", value=0.1),
+            dcc.Input(id=P + "threshold", type="number", min=0, max=1, step="any", value=0.1),
             html.Label("Alert budget (fraction of development rows)"),
-            dcc.Input(id=P + "budget", type="number", min=0.000001, max=1,
-                      step=0.01, value=0.05),
+            dcc.Input(id=P + "budget", type="number", min=0.000001, max=1, step=0.01, value=0.05),
             html.Div(id=P + "body"),
         ],
         style=STYLE,
     )
 
 
-def build_view(bundle, metric="brier", score_variant="calibrated_crossfit", threshold=0.1, budget=0.05):
+def build_view(
+    bundle, metric="brier", score_variant="calibrated_crossfit", threshold=0.1, budget=0.05
+):
     comparison = cd.metric_comparison(bundle["metrics"])
     distributions = cd.distribution_table(bundle["predictions"])
     summary = (
@@ -116,9 +121,13 @@ def build_view(bundle, metric="brier", score_variant="calibrated_crossfit", thre
             dcc.Graph(figure=cf.distribution_fig(distributions)),
             dcc.Graph(figure=cf.mapping_fig(bundle["calibrator"])),
             html.H3("Estimated thresholds on the selected development score scale"),
-            render_threshold_panel(threshold_frames, threshold, budget, metadata=threshold_metadata),
-            html.P("To freeze a policy, use the explicit policy_selection CLI after reviewing the objective, "
-                   "workload, ties and score-scale transfer. This page never writes a policy."),
+            render_threshold_panel(
+                threshold_frames, threshold, budget, metadata=threshold_metadata
+            ),
+            html.P(
+                "To freeze a policy, use the explicit policy_selection CLI after reviewing the objective, "
+                "workload, ties and score-scale transfer. This page never writes a policy."
+            ),
             html.H3("Saved settings and final parameters"),
             html.Pre(
                 json.dumps(
@@ -199,10 +208,18 @@ def register_callbacks(app: Dash, engine):
             bundle = cd.load_calibration(engine, calibration_id)
             if bundle["header"]["parent_run_id"] != parent:
                 return html.P("Choose a calibration for the selected parent run.")
-            if threshold is None or not 0 <= threshold <= 1 or budget is None or not 0 < budget <= 1:
+            if (
+                threshold is None
+                or not 0 <= threshold <= 1
+                or budget is None
+                or not 0 < budget <= 1
+            ):
                 return html.P("Use a cutoff in [0,1] and an alert budget in (0,1].")
-            return build_view(bundle, metric or "brier", score_variant or "calibrated_crossfit", threshold, budget)
+            return build_view(
+                bundle, metric or "brier", score_variant or "calibrated_crossfit", threshold, budget
+            )
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return html.Pre(f"Calibration diagnostics unavailable: {exc}")
+
 
 # calibrated-policy update v1

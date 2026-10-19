@@ -81,9 +81,11 @@ def render_threshold_panel(predictions, current_threshold=0.5, budget=0.05, *, m
     return html.Div(
         [
             html.P(DISCLAIMER),
-            html.P("The cutoff applies only to the named score variant. A calibrated-cross-fit "
-                   "recommendation is not an exact transfer guarantee for one final calibrator. "
-                   "No raw cutoff is numerically reused on another score scale."),
+            html.P(
+                "The cutoff applies only to the named score variant. A calibrated-cross-fit "
+                "recommendation is not an exact transfer guarantee for one final calibrator. "
+                "No raw cutoff is numerically reused on another score scale."
+            ),
             html.P(
                 "F1 balances precision/recall; F2 weights recall more heavily. Candidates use exact observed "
                 "scores, not the slider's 0.01 grid. Tied maxima choose the highest candidate cutoff. "
@@ -113,5 +115,6 @@ def render_single(engine, run_id, threshold):
         return render_threshold_panel({run_id: frame} if frame is not None else {}, threshold)
     except (ValueError, KeyError, OSError) as exc:
         return html.P(f"Threshold estimation blocked: {exc}", role="status")
+
 
 # calibrated-policy update v1

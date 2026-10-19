@@ -1,4 +1,5 @@
 """Real-project filesystem/source-validation integration; no holdout labels."""
+
 from types import SimpleNamespace
 
 import pytest
@@ -13,7 +14,9 @@ def test_changed_selection_file_rejected_before_source_access(tmp_path, monkeypa
     path.write_text("tampered")
     ref = SimpleNamespace(artifact_path=str(path), artifact_sha256="0" * 64)
     spec = SimpleNamespace(policy=SimpleNamespace(selection=ref))
-    monkeypatch.setattr(run_artifacts, "verify_artifact", lambda *a: pytest.fail("must reject before source read"))
+    monkeypatch.setattr(
+        run_artifacts, "verify_artifact", lambda *a: pytest.fail("must reject before source read")
+    )
     with pytest.raises(ValueError, match="record hash mismatch"):
         validate_policy_selection(spec, {}, tmp_path)
 
@@ -35,7 +38,11 @@ def test_evaluator_does_not_execute_after_preflight_rejection(monkeypatch):
 
 def test_saved_policy_reference_changes_identity():
     from ml_template.evaluation.evaluation_config import EvaluationConfig
-    data = {"parent_run_id": "run_test", "policy": {"kind": "threshold", "value": 0.2, "source": "manual"}}
+
+    data = {
+        "parent_run_id": "run_test",
+        "policy": {"kind": "threshold", "value": 0.2, "source": "manual"},
+    }
     first = EvaluationConfig.model_validate(data)
     data["policy"]["value"] = 0.3
     second = EvaluationConfig.model_validate(data)
