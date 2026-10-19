@@ -14,11 +14,22 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
 
+class PolicySelectionRef(StrictModel):
+    artifact_path: str = Field(min_length=1)
+    artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    parent_run_id: str = Field(min_length=1)
+    calibration_id: str
+    score_variant: Literal["raw", "calibrated_crossfit"]
+    objective: Literal["f1", "f2", "manual", "alert_rate"]
+    transfer_acknowledged: bool = False
+
+
 class PolicyConfig(StrictModel):
     kind: Literal["none", "threshold", "alert_rate"] = "none"
     value: float | None = None
     source: str = "No policy selected"
     batch_definition: str = "entire evaluation holdout"
+    selection: PolicySelectionRef | None = None
 
     @model_validator(mode="after")
     def check(self):
@@ -28,6 +39,10 @@ class PolicyConfig(StrictModel):
             raise ValueError("policy value must be in [0,1]")
         if self.kind == "alert_rate" and self.value == 0:
             raise ValueError("alert rate must be positive")
+        if self.kind == "none" and self.selection is not None:
+            raise ValueError("none policy cannot have selection provenance")
+        if not self.batch_definition.strip():
+            raise ValueError("document the policy batch definition")
         if not self.source.strip():
             raise ValueError("document the policy source")
         return self
@@ -87,6 +102,15 @@ class EvaluationConfig(StrictModel):
     def check(self):
         if self.release_variant == "calibrated" and not self.calibration_id:
             raise ValueError("calibrated release requires calibration_id")
+        ref = self.policy.selection
+        if ref is not None:
+            if ref.parent_run_id != self.parent_run_id or ref.calibration_id != self.calibration_id:
+                raise ValueError("policy-selection predictor identity mismatch")
+            expected = "calibrated_crossfit" if self.release_variant == "calibrated" else "raw"
+            if ref.score_variant != expected:
+                raise ValueError("policy-selection score scale mismatch")
+            if expected == "calibrated_crossfit" and not ref.transfer_acknowledged:
+                raise ValueError("acknowledge cross-fit-to-final calibrator transfer")
         if len(set(self.alert_rates)) != len(self.alert_rates) or any(
             not 0 < r <= 1 for r in self.alert_rates
         ):
@@ -103,3 +127,5 @@ class EvaluationConfig(StrictModel):
 
 def load_evaluation_config(path):
     return EvaluationConfig.model_validate(yaml.safe_load(Path(path).read_text(encoding="utf-8")))
+
+# calibrated-policy update v1

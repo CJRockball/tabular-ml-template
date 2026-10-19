@@ -384,3 +384,25 @@ def metadata_table(bundle):
     )
     values["artifact_directory"] = bundle["folder"]
     return pd.DataFrame([{"field": k, "value": v} for k, v in values.items()])
+
+
+def threshold_inputs(bundle, score_variant="calibrated_crossfit"):
+    """Adapt only verified, keyed development scores to shared threshold panels."""
+    if score_variant not in VARIANTS:
+        raise ValueError("unsupported threshold score variant")
+    frame = bundle["predictions"]
+    if frame is None or frame.empty:
+        return {}, {}
+    key = bundle["provenance"]["key_col"]
+    frame = validate_predictions(frame, key).sort_values(key, kind="stable")
+    column = "p_raw" if score_variant == "raw" else "p_cal_crossfit"
+    view = frame[[key, "fold", "y_true", column]].rename(columns={column: "p_oof"})
+    label = "Raw OOF" if score_variant == "raw" else "Calibrated cross-fit"
+    metadata = {label: {
+        "parent_run_id": bundle["header"]["parent_run_id"],
+        "calibration_id": bundle["header"]["calibration_id"],
+        "score_variant": score_variant, "source_score_column": column,
+    }}
+    return {label: view}, metadata
+
+# calibrated-policy update v1

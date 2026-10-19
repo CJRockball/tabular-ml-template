@@ -52,6 +52,10 @@ def policy_metrics(y, flags):
         "tn": tn,
         "precision": precision,
         "recall": ratio(tp, tp + fn),
+        "f1": ratio(2 * tp, 2 * tp + fn + fp) if tp + fn else None,
+        "f2": ratio(5 * tp, 5 * tp + 4 * fn + fp) if tp + fn else None,
         "false_positive_rate": ratio(fp, fp + tn),
         "lift": precision / base if precision is not None and base else None,
     }
+
+# calibrated-policy update v1

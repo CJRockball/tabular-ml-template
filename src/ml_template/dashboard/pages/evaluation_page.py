@@ -67,6 +67,8 @@ def render_selection(engine, evaluation_id):
         ("Raw and calibrated holdout metrics", data["metrics"]),
         ("Calibrated minus raw", data["differences"]),
         ("Frozen operating policy", data["policy_results"]),
+        ("Development policy-selection provenance: not final-test evidence",
+         [data["policy_selection"]] if data.get("policy_selection") else []),
         ("Acceptance criteria: not automatic promotion", data["acceptance"]["criteria"]),
         ("Reliability support", data["reliability"]),
         ("Subgroups: global policy, exploratory", data["subgroups"]),
@@ -123,3 +125,5 @@ def register_callbacks(app, engine):
     @app.callback(Output("final-eval-content", "children"), Input("final-eval-id", "value"))
     def select(evaluation_id):
         return render_selection(engine, evaluation_id)
+
+# calibrated-policy update v1

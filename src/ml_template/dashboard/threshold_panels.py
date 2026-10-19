@@ -22,12 +22,13 @@ DISCLAIMER = (
 )
 
 
-def render_threshold_panel(predictions, current_threshold=0.5, budget=0.05):
+def render_threshold_panel(predictions, current_threshold=0.5, budget=0.05, *, metadata=None):
     if not predictions:
         return html.P(
             "Threshold estimates unavailable: complete validated development OOF predictions are required.",
             role="status",
         )
+    metadata = metadata or {}
     profiles, recs, folds, budgets = {}, [], [], []
     for run_id, frame in predictions.items():
         if frame.empty:
@@ -35,12 +36,12 @@ def render_threshold_panel(predictions, current_threshold=0.5, budget=0.05):
         # Prediction loaders have already checked development membership and aligned keys/folds.
         profile = threshold_profile(frame["y_true"], frame["p_oof"])
         profiles[run_id] = profile
-        recs.append(recommendations(profile).assign(run_id=run_id))
+        recs.append(recommendations(profile).assign(run_id=run_id, **metadata.get(run_id, {})))
         folded = fold_recommendations(frame["y_true"], frame["p_oof"], frame["fold"])
-        folds.append(folded.assign(run_id=run_id))
+        folds.append(folded.assign(run_id=run_id, **metadata.get(run_id, {})))
         budgets.append(
             budget_boundaries(frame["y_true"], frame["p_oof"], rates=(0.05, 0.10, budget)).assign(
-                run_id=run_id
+                run_id=run_id, **metadata.get(run_id, {})
             )
         )
     if not profiles:
@@ -80,6 +81,9 @@ def render_threshold_panel(predictions, current_threshold=0.5, budget=0.05):
     return html.Div(
         [
             html.P(DISCLAIMER),
+            html.P("The cutoff applies only to the named score variant. A calibrated-cross-fit "
+                   "recommendation is not an exact transfer guarantee for one final calibrator. "
+                   "No raw cutoff is numerically reused on another score scale."),
             html.P(
                 "F1 balances precision/recall; F2 weights recall more heavily. Candidates use exact observed "
                 "scores, not the slider's 0.01 grid. Tied maxima choose the highest candidate cutoff. "
@@ -109,3 +113,5 @@ def render_single(engine, run_id, threshold):
         return render_threshold_panel({run_id: frame} if frame is not None else {}, threshold)
     except (ValueError, KeyError, OSError) as exc:
         return html.P(f"Threshold estimation blocked: {exc}", role="status")
+
+# calibrated-policy update v1
