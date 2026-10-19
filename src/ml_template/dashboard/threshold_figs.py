@@ -88,4 +88,5 @@ def fold_optima(table: pd.DataFrame):
     )
     return fig
 
+
 # calibrated-policy update v1

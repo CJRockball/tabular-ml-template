@@ -7,11 +7,12 @@ SWEEP  ?= configs/sweep/xgb_grid.yaml
 RUN    := uv run python
 CALIBRATION_CONFIG ?= configs/calibration/test_958bec.yaml
 EVALUATION_CONFIG ?= configs/evaluation/test_958bec.yaml
+RELEASE_CONFIG ?= configs/release/example_958bec.yaml
+RELEASE_DIR ?=
+SCORE_INPUT ?=
+SCORE_ARGS ?=
 
-.PHONY: ingest eda silver split features train sweep evaluate pipeline 
-		clean rebuild check dashboard calibrate calibrate-check calibration-tests
-		evaluate-check evaluate evaluation-tests
-
+.PHONY: ingest eda silver split features train sweep evaluate pipeline clean rebuild check dashboard calibrate calibrate-check calibration-tests evaluate-check evaluation-tests release-check release score-check score scoring-tests
 
 ingest:
 	$(RUN) -m $(PKG).data.ingest --data_file $(CONFIG) --dataset_version_id $(DS)
@@ -48,8 +49,21 @@ pipeline: ingest eda silver split train
 rebuild: clean pipeline
 
 clean:
-	find data -mindepth 1 -maxdepth 1 ! -name .gitignore ! -name raw -exec rm -rf {} +
-	find artifacts logs assets -mindepth 1 ! -name .gitkeep ! -name .gitignore -delete 2>/dev/null || true
+	# Preserve datasets, project.db, model provenance, releases and scored batches.
+	rm -rf .pytest_cache .ruff_cache .mypy_cache
 
 check:
 	uv run ruff check && uv run pytest -q
+
+release-check:
+	$(RUN) -m $(PKG).scoring.release_builder --config "$(RELEASE_CONFIG)" --check
+release:
+	$(RUN) -m $(PKG).scoring.release_builder --config "$(RELEASE_CONFIG)" --execute
+score-check:
+	@test -n "$(RELEASE_DIR)" -a -n "$(SCORE_INPUT)" || (echo 'Set RELEASE_DIR and SCORE_INPUT'; exit 2)
+	$(RUN) -m $(PKG).scoring.batch --release "$(RELEASE_DIR)" --input "$(SCORE_INPUT)" --check $(SCORE_ARGS)
+score:
+	@test -n "$(RELEASE_DIR)" -a -n "$(SCORE_INPUT)" || (echo 'Set RELEASE_DIR and SCORE_INPUT'; exit 2)
+	$(RUN) -m $(PKG).scoring.batch --release "$(RELEASE_DIR)" --input "$(SCORE_INPUT)" --execute $(SCORE_ARGS)
+scoring-tests:
+	$(RUN) -m pytest -q tests/scoring

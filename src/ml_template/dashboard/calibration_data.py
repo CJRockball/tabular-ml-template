@@ -398,11 +398,15 @@ def threshold_inputs(bundle, score_variant="calibrated_crossfit"):
     column = "p_raw" if score_variant == "raw" else "p_cal_crossfit"
     view = frame[[key, "fold", "y_true", column]].rename(columns={column: "p_oof"})
     label = "Raw OOF" if score_variant == "raw" else "Calibrated cross-fit"
-    metadata = {label: {
-        "parent_run_id": bundle["header"]["parent_run_id"],
-        "calibration_id": bundle["header"]["calibration_id"],
-        "score_variant": score_variant, "source_score_column": column,
-    }}
+    metadata = {
+        label: {
+            "parent_run_id": bundle["header"]["parent_run_id"],
+            "calibration_id": bundle["header"]["calibration_id"],
+            "score_variant": score_variant,
+            "source_score_column": column,
+        }
+    }
     return {label: view}, metadata
+
 
 # calibrated-policy update v1
