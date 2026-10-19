@@ -1,3 +1,4 @@
+# threshold-diagnostics-v1
 import pandas as pd
 import pytest
 from sqlalchemy import create_engine
@@ -143,6 +144,11 @@ def test_labels_and_oof_join(engine, tmp_path):
     pd.DataFrame({"udi": [1, 2, 3, 4], "machine_failure": [0, 1, 0, 1]}).to_parquet(
         silver / "data.parquet", index=False
     )
+    split_dir = tmp_path / "split"
+    split_dir.mkdir()
+    pd.DataFrame({"udi": [1, 2, 3, 4], "partition": ["dev"] * 4, "fold": [0, 0, 1, 1]}).to_parquet(
+        split_dir / "assignments.parquet", index=False
+    )
     with engine.begin() as conn:
         conn.execute(
             splits.insert(),
@@ -150,7 +156,7 @@ def test_labels_and_oof_join(engine, tmp_path):
                 {
                     "split_id": "sp",
                     "silver_dataset_version_id": "s",
-                    "path": "x",
+                    "path": str(split_dir),
                     "policy_json": "{}",
                     "key_col": "udi",
                     "target_col": "machine_failure",

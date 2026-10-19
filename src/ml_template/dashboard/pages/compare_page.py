@@ -1,3 +1,4 @@
+# threshold-diagnostics-v1
 """Two-or-more-run comparison page. No model fitting or holdout evaluation."""
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from sqlalchemy import Engine
 from ml_template.dashboard import compare_data as cd
 from ml_template.dashboard import compare_figs as cf
 from ml_template.dashboard import experiment_data as ed
+from ml_template.dashboard import threshold_panels
 from ml_template.dashboard.inventory_common import grid
 
 P = "compare-"
@@ -154,6 +156,10 @@ def build_view(
         html.P(
             "Reliability uses stored OOF probabilities, not newly calibrated scores. "
             "Class weighting can change their probability interpretation."
+        ),
+        html.H3("Estimated OOF thresholds"),
+        threshold_panels.render_threshold_panel(
+            predictions, current_threshold=cutoff, budget=budget
         ),
         html.H3("Operating-point comparison"),
         grid(operating),

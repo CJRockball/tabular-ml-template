@@ -1,3 +1,4 @@
+# threshold-diagnostics-v1
 """Loaders for the single-run page. Reads project.db and run folders; no Dash or Plotly."""
 
 from __future__ import annotations
@@ -72,37 +73,81 @@ def load_importance(engine: Engine, run_id: str, fold: int = -1) -> pd.DataFrame
 
 
 def load_labels(engine: Engine, header: dict, silver_root: Path = DATA_SILVER) -> pd.Series | None:
-    """Target indexed by entity key, from the run's Silver parquet. Key and target names
-    come from the splits table, so nothing here is dataset specific."""
-    split = _query(
-        engine,
-        "SELECT key_col, target_col FROM splits WHERE split_id = :s",
-        s=header["split_id"],
-    )
+    """Version-checked Silver labels with canonical unique keys; never truncate fractional labels."""
+    split = _query(engine, "SELECT * FROM splits WHERE split_id = :s", s=header["split_id"])
     if split.empty:
         return None
-    key, target = split.iloc[0]["key_col"], split.iloc[0]["target_col"]
-    if not key or not target:
+    row = split.iloc[0]
+    key, target = row["key_col"], row["target_col"]
+    if pd.isna(key) or pd.isna(target) or not key or not target:
         return None
     silver_id = header["silver_dataset_version_id"]
+    if row["silver_dataset_version_id"] != silver_id:
+        raise ValueError("Stored split and run reference different Silver versions")
     matches = sorted(Path(silver_root).glob(f"*/{silver_id}/data.parquet"))
     if not matches:
         return None
+    if len(matches) != 1:
+        raise ValueError("Ambiguous Silver version: multiple datasets match the run")
     df = pd.read_parquet(matches[0], columns=[key, target])
+    if df[key].isna().any() or df[key].duplicated().any():
+        raise ValueError("Silver entity keys must be unique and non-null")
+    if not df[target].isin([0, 1]).all():
+        raise ValueError("Silver target must contain only non-null binary 0/1 labels")
     return df.set_index(key)[target].astype(int)
 
 
 def load_oof_with_labels(
     engine: Engine, header: dict, folder: Path, silver_root: Path = DATA_SILVER
 ) -> pd.DataFrame | None:
-    """OOF predictions plus a y_true column; None if predictions or labels are missing."""
+    """Strict full-development OOF join. Missing files return None; invalid data raises.
+
+    No rows are dropped, and every row/fold must match the stored development partition.
+    """
+    from ml_template.dashboard.compare_data import align_predictions, attach_labels
+    from ml_template.paths import DATA_SPLITS, ROOT
+
     oof = load_oof(folder)
-    labels = load_labels(engine, header, silver_root)
-    if oof is None or labels is None or labels.index.name not in oof.columns:
+    if oof is None:
         return None
-    out = oof.copy()
-    out["y_true"] = labels.reindex(out[labels.index.name]).to_numpy()
-    return out.dropna(subset=["y_true"]).astype({"y_true": int})
+    labels = load_labels(engine, header, silver_root)
+    if labels is None:
+        return None
+    split = _query(engine, "SELECT * FROM splits WHERE split_id = :s", s=header["split_id"])
+    if split.empty:
+        return None
+    row = split.iloc[0]
+    stored = row.get("path")
+    path = (
+        Path(str(stored))
+        if stored is not None and not pd.isna(stored)
+        else DATA_SPLITS / header["split_id"]
+    )
+    if not path.is_absolute():
+        path = ROOT / path
+    if path.is_dir():
+        path = path / "assignments.parquet"
+    if not path.is_file():
+        path = DATA_SPLITS / str(header["split_id"]) / "assignments.parquet"
+    if not path.is_file():
+        return None
+    assignments = pd.read_parquet(path)
+    required = {labels.index.name, "partition", "fold"}
+    if not required.issubset(assignments):
+        raise ValueError("Stored split assignments lack key/partition/fold columns")
+    if not assignments["partition"].isin(["dev", "holdout"]).all():
+        raise ValueError("Stored split has invalid partition labels")
+    dev_folds = pd.to_numeric(
+        assignments.loc[assignments["partition"] == "dev", "fold"], errors="coerce"
+    )
+    if not dev_folds.map(
+        lambda value: pd.notna(value) and value >= 0 and float(value).is_integer()
+    ).all():
+        raise ValueError("Stored development folds must be nonnegative integers")
+    raw = attach_labels(oof, labels, str(labels.index.name))
+    return align_predictions({header["run_id"]: raw}, str(labels.index.name), assignments)[
+        header["run_id"]
+    ]
 
 
 def run_dir(header: dict, base: Path = ARTIFACTS_RUNS) -> Path:
