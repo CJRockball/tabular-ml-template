@@ -1,3 +1,4 @@
+# threshold-diagnostics-v1
 """Single-run page: layout, view builders and callbacks.
 
 View builders take an engine and a run id and return plain data or components, so they
@@ -15,6 +16,7 @@ from sqlalchemy import Engine
 
 from ml_template.dashboard import run_data as rd
 from ml_template.dashboard import run_figs as rf
+from ml_template.dashboard import threshold_panels
 
 ALL = "(all)"
 SECTION = {"marginTop": "32px"}
@@ -40,8 +42,12 @@ def _grid(df: pd.DataFrame, height: int = 280) -> dag.AgGrid:
 
 @lru_cache(maxsize=8)
 def _scored(engine: Engine, run_id: str) -> pd.DataFrame | None:
-    header = rd.run_header(engine, run_id)
-    return rd.load_oof_with_labels(engine, header, rd.run_dir(header))
+    try:
+        header = rd.run_header(engine, run_id)
+        return rd.load_oof_with_labels(engine, header, rd.run_dir(header))
+    except (ValueError, KeyError, OSError):
+        # Threshold panel gives a visible reason; existing score plots show placeholders.
+        return None
 
 
 def run_choices(engine: Engine, experiment: str | None) -> tuple[list[dict], str | None]:
@@ -240,6 +246,8 @@ def layout(engine: Engine) -> html.Div:
             ),
             html.Div(id="thr-text", style={"marginTop": "8px"}),
             dcc.Graph(id="hist-fig"),
+            html.H3("Estimated OOF thresholds", style=SECTION),
+            html.Div(id="run-threshold-analysis"),
             html.H3("Errors (out-of-fold)", style=SECTION),
             html.Div(id="errors-table"),
             html.H3("Cost", style=SECTION),
@@ -326,3 +334,11 @@ def register_callbacks(app: Dash, engine: Engine) -> None:
     )
     def _cost(run_id):
         return cost_view(engine, run_id)
+
+    @app.callback(
+        Output("run-threshold-analysis", "children"),
+        Input("run-dd", "value"),
+        Input("thr-slider", "value"),
+    )
+    def _threshold_estimates(run_id, threshold):
+        return threshold_panels.render_single(engine, run_id, threshold)
