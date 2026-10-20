@@ -78,6 +78,18 @@ class ReleasedPredictor:
         # Integrity/runtime verification precedes joblib deserialisation in load_adapter.
         self.model = load_adapter(cfg, self.directory / "model.ubj")
 
+    def _prepare_source_features(self, source):
+        """Internal path for already-validated source rows; fitted features stay in adapter."""
+        return coerce_frame(replay_recipe(source, self.recipe), self.contract["model_schema"])
+
+    def prepare_features(self, frame):
+        """Validate canonical keyed inputs and replay frozen stateless features.
+
+        Returns selected pre-transform inputs indexed by entity key. Do not apply the
+        saved fitted transformer here: the model adapter owns that boundary.
+        """
+        return self._prepare_source_features(validate_batch(frame, self.contract))
+
     def predict(self, frame, *, chunk_size=None, include_policy=True):
         raw = validate_batch(frame, self.contract)
         if chunk_size is None:
@@ -87,9 +99,7 @@ class ReleasedPredictor:
         pieces = []
         for start in range(0, len(raw), chunk_size):
             source = raw.iloc[start : start + chunk_size]
-            features = coerce_frame(
-                replay_recipe(source, self.recipe), self.contract["model_schema"]
-            )
+            features = self._prepare_source_features(source)
             scores = probabilities(self.model.predict_proba(features))
             if len(scores) != len(source):
                 raise ValueError("model prediction length mismatch")
