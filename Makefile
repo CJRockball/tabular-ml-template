@@ -67,3 +67,38 @@ score:
 	$(RUN) -m $(PKG).scoring.batch --release "$(RELEASE_DIR)" --input "$(SCORE_INPUT)" --execute $(SCORE_ARGS)
 scoring-tests:
 	$(RUN) -m pytest -q tests/scoring
+
+# BEGIN explainability batch 2 (backend only)
+EXPLANATION_CONFIG ?= configs/explainability/example.yaml
+.PHONY: explain-check explain explanation-tests
+explain-check:
+	$(RUN) -m $(PKG).explainability.explain_batch --config "$(EXPLANATION_CONFIG)" --check
+explain:
+	$(RUN) -m $(PKG).explainability.explain_batch --config "$(EXPLANATION_CONFIG)" --execute
+explanation-tests:
+	$(RUN) -m pytest -q tests/explainability
+# END explainability batch 2
+
+# BEGIN runtime and separate usage presentation
+RUNTIME_RELEASE ?=
+RUNTIME_CHECKOUT ?=
+RUNTIME_COMMIT ?=
+USAGE_DATABASE ?= data/project.db
+USAGE_PORT ?= 8051
+EXPLANATION_ID ?=
+REPORT_ROOT ?= artifacts/explanation_reports
+.PHONY: runtime-check runtime-create explanation-report usage-dashboard presentation-tests
+runtime-check:
+	@test -n "$(RUNTIME_RELEASE)" || (echo 'Set RUNTIME_RELEASE'; exit 2)
+	$(RUN) -m $(PKG).scripts.prepare_runtime --release "$(RUNTIME_RELEASE)" $(if $(RUNTIME_CHECKOUT),--checkout "$(RUNTIME_CHECKOUT)",) $(if $(RUNTIME_COMMIT),--commit "$(RUNTIME_COMMIT)",) --check
+runtime-create:
+	@test -n "$(RUNTIME_RELEASE)" || (echo 'Set RUNTIME_RELEASE'; exit 2)
+	$(RUN) -m $(PKG).scripts.prepare_runtime --release "$(RUNTIME_RELEASE)" $(if $(RUNTIME_CHECKOUT),--checkout "$(RUNTIME_CHECKOUT)",) $(if $(RUNTIME_COMMIT),--commit "$(RUNTIME_COMMIT)",) --create
+explanation-report:
+	@test -n "$(EXPLANATION_ID)" || (echo 'Set EXPLANATION_ID'; exit 2)
+	$(RUN) -m $(PKG).explainability.export_report --database "$(USAGE_DATABASE)" --explanation-id "$(EXPLANATION_ID)" --output-root "$(REPORT_ROOT)"
+usage-dashboard:
+	$(RUN) -m $(PKG).usage_dashboard.app --database "$(USAGE_DATABASE)" --port "$(USAGE_PORT)"
+presentation-tests:
+	$(RUN) -m pytest -q tests/runtime tests/presentation tests/usage_dashboard
+# END runtime and separate usage presentation

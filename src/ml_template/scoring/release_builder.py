@@ -76,8 +76,7 @@ def _evidence(engine, request):
     now_code = runtime_info()["code_sha256"]
     for name, expected in old.get("code_hashes", {}).items():
         if (
-            name.startswith(("features/", "models/"))
-            or name == "training/run_config.py"
+            name.startswith(("features/", "models/")) or name == "training/run_config.py"
         ) and now_code.get(name) != expected:
             raise ValueError(f"evaluated prediction implementation changed: {name}")
     return prepared, directory, spec, summary, old

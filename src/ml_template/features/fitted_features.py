@@ -136,6 +136,30 @@ class TransformingAdapter:
             raise RuntimeError("model is not fitted")
         return self.inner.predict_proba(self.transformer.transform(X))
 
+    def estimator_feature_names(self) -> list[str]:
+        if self.transformer is None:
+            raise RuntimeError("model is not fitted")
+        return self.inner.estimator_feature_names()
+
+    def predict_margin(self, X: pd.DataFrame) -> np.ndarray:
+        if self.transformer is None:
+            raise RuntimeError("model is not fitted")
+        if not callable(getattr(self.inner, "predict_margin", None)):
+            raise TypeError("inner adapter does not support margin prediction")
+        return self.inner.predict_margin(self.transformer.transform(X))
+
+    def explain_margin(self, X: pd.DataFrame, *, tolerance=None):
+        """Transform exactly once; returned features are the estimator's expanded inputs."""
+        if self.transformer is None:
+            raise RuntimeError("model is not fitted")
+        if not callable(getattr(self.inner, "explain_margin", None)):
+            raise TypeError("inner adapter does not support margin explanations")
+        transformed = self.transformer.transform(X)
+        expected = self.transformer.output_columns(list(X.columns))
+        if list(transformed.columns) != expected:
+            raise ValueError("fitted transformer output order mismatch")
+        return self.inner.explain_margin(transformed, tolerance=tolerance)
+
     def save(self, path: Path) -> None:
         if self.transformer is None:
             raise RuntimeError("model is not fitted")
