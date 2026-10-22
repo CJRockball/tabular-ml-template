@@ -25,29 +25,51 @@ def runtime_fixture(tmp_path, monkeypatch):
     (repo / "uv.lock").write_text("# fixture; actual uv installation is stubbed\n")
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.name", "Fixture"], check=True)
-    subprocess.run(["git", "-C", str(repo), "config", "user.email", "fixture@example.invalid"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "fixture@example.invalid"], check=True
+    )
     subprocess.run(["git", "-C", str(repo), "add", "src", "pyproject.toml", "uv.lock"], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "fixture baseline"], check=True)
     commit = helper.resolve_commit(repo, "HEAD")
-    runtime = {"python": platform.python_version(), "packages": {name: "not-installed" for name in release_artifacts.PACKAGES},
-               "code_sha256": helper.checkout_hashes(repo)}
+    runtime = {
+        "python": platform.python_version(),
+        "packages": {name: "not-installed" for name in release_artifacts.PACKAGES},
+        "code_sha256": helper.checkout_hashes(repo),
+    }
     release = tmp_path / "release"
     release.mkdir()
-    for name in ("release.json", "config.json", "contract.json", "feature_recipe.json", "evidence.json"):
+    for name in (
+        "release.json",
+        "config.json",
+        "contract.json",
+        "feature_recipe.json",
+        "evidence.json",
+    ):
         (release / name).write_text("{}")
     (release / "runtime.json").write_text(json.dumps(runtime))
     (release / "model.ubj").write_bytes(b"fixture model bytes; never deserialized")
     release_artifacts.seal(release)
     calls = []
+
     def fake_sync(destination, python_version, timeout):
         calls.append((destination, python_version))
         venv.EnvBuilder(with_pip=False).create(destination / ".venv")
         executable = destination / ".venv/bin/python"
-        site = subprocess.check_output([str(executable), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], text=True).strip()
+        site = subprocess.check_output(
+            [str(executable), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
+            text=True,
+        ).strip()
         Path(site, "fixture_editable.pth").write_text(str(destination / "src") + "\n")
+
     monkeypatch.setattr(helper, "sync_environment", fake_sync)
-    return SimpleNamespace(repo=repo, release=release, runtime=runtime, commit=commit,
-                           root=tmp_path / "runtimes", calls=calls)
+    return SimpleNamespace(
+        repo=repo,
+        release=release,
+        runtime=runtime,
+        commit=commit,
+        root=tmp_path / "runtimes",
+        calls=calls,
+    )
 
 
 def test_commit_hashes_match_saved_source(runtime_fixture):
@@ -80,8 +102,9 @@ def test_create_then_reuse_real_isolated_venv(runtime_fixture):
 def test_existing_checkout_can_be_adopted(runtime_fixture):
     obj = runtime_fixture
     first = helper.prepare(obj.repo, obj.release, runtime_root=obj.root, create=True)
-    result = helper.prepare(obj.repo, obj.release, runtime_root=obj.root,
-                            checkout=first["checkout"], create=True)
+    result = helper.prepare(
+        obj.repo, obj.release, runtime_root=obj.root, checkout=first["checkout"], create=True
+    )
     assert result["ready"] and not result["created"]
     assert len(obj.calls) == 1
 

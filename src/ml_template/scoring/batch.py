@@ -38,7 +38,7 @@ def check_batch_definition(predictor, batch_definition):
         raise ValueError("batch definition differs from the frozen release policy")
 
 
-def score_batch(
+def _score_batch(
     engine,
     release_dir,
     input_path,
@@ -47,8 +47,13 @@ def score_batch(
     chunk_size=None,
     batch_definition=None,
     check_only=False,
+    batch_metadata=None,
+    stage_hook=None,
 ):
+    stage_hook = stage_hook or (lambda stage, batch_id=None: None)
+    stage_hook("release_loading")
     predictor = ReleasedPredictor(release_dir)
+    stage_hook("argument_validation")
     check_batch_definition(predictor, batch_definition)
     input_path = Path(input_path).resolve()
     if input_path.suffix.lower() not in {".csv", ".parquet"}:
@@ -77,8 +82,10 @@ def score_batch(
     batch_id = f"score_{datetime.now(UTC):%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:12]}"
     directory = (Path(output_root or ARTIFACTS / "scores") / batch_id).resolve()
     directory.parent.mkdir(parents=True, exist_ok=True)
+    stage_hook("registration")
     registry.register_release(engine, predictor.manifest, predictor.info, predictor.directory)
     registry.start_batch(engine, batch_id, predictor.release_id, directory, input_path.name)
+    stage_hook("input_snapshot", batch_id)
     started = time.perf_counter()
     digest = None
     try:
@@ -91,8 +98,13 @@ def score_batch(
             digest = sha256(snapshot)
             if before != digest or digest != sha256(input_path):
                 raise ValueError("input changed while snapshotting")
+            stage_hook("input_validation", batch_id)
             frame = read_batch(snapshot, predictor.contract)
+            stage_hook("prediction", batch_id)
+            prediction_started = time.perf_counter()
             out = predictor.predict(frame, chunk_size=chunk_size)
+            prediction_duration = time.perf_counter() - prediction_started
+            stage_hook("artifact_writing", batch_id)
             out["scoring_batch_id"] = batch_id
             out.to_parquet(directory / "predictions.parquet", index=False)
             flagged = int(out.policy_flag.sum()) if "policy_flag" in out else None
@@ -116,6 +128,8 @@ def score_batch(
                 "labels_loaded": False,
                 "created_at": datetime.now(UTC).isoformat(),
                 "duration_s": time.perf_counter() - started,
+                "batch_metadata": batch_metadata or {},
+                "timings": {"prediction_s": prediction_duration},
             }
             write_json(directory / "summary.json", summary)
             write_json(
@@ -132,6 +146,7 @@ def score_batch(
             error=f"{type(exc).__name__}: {exc}",
         )
         raise
+    stage_hook("batch_finalization", batch_id)
     registry.finish_batch(
         engine,
         batch_id,
@@ -150,6 +165,32 @@ def score_batch(
     }
 
 
+def score_batch(
+    engine,
+    release_dir,
+    input_path,
+    *,
+    output_root=None,
+    chunk_size=None,
+    batch_definition=None,
+    check_only=False,
+    batch_metadata=None,
+):
+    from ml_template.monitoring.scoring_attempts import tracked_score
+
+    return tracked_score(
+        _score_batch,
+        engine,
+        release_dir,
+        input_path,
+        output_root=output_root,
+        chunk_size=chunk_size,
+        batch_definition=batch_definition,
+        check_only=check_only,
+        batch_metadata=batch_metadata,
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", required=True, type=Path)
@@ -160,6 +201,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--execute", action="store_true")
+    parser.add_argument("--metadata", type=Path, help="Optional batch metadata JSON")
     args = parser.parse_args(argv)
     from ml_template.tracking.pipeline_logging import setup_logging
 
@@ -177,6 +219,7 @@ def main(argv=None):
         chunk_size=args.chunk_size,
         batch_definition=args.batch_definition,
         check_only=args.check,
+        batch_metadata=args.metadata,
     )
     print(json.dumps(result, indent=2, allow_nan=False))
 

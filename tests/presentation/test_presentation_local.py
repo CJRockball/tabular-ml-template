@@ -15,6 +15,7 @@ def test_local_report_export(tmp_path):
     from ml_template.explainability.export_report import export_report
     from ml_template.explainability.presentation_data import load_explanation
     from ml_template.paths import ROOT
+
     database = Path(os.environ.get("ML_TEMPLATE_PRESENTATION_DATABASE", ROOT / "data/project.db"))
     view = load_explanation(database, identity)
     before = file_entries(view.record["artifact_dir"])

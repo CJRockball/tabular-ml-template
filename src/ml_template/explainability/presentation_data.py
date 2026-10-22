@@ -37,11 +37,16 @@ def list_explanations(database, limit=500):
         raise ValueError("positive limit required")
     with closing(_connection(database)) as conn:
         conn.row_factory = sqlite3.Row
-        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='explanation_runs'").fetchone()
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='explanation_runs'"
+        ).fetchone()
         if not exists:
             return []
-        rows = conn.execute("SELECT explanation_id,release_id,scoring_batch_id,started_at,n_rows,n_features,artifact_dir "
-                            "FROM explanation_runs WHERE status='succeeded' ORDER BY started_at DESC,explanation_id DESC LIMIT ?", (limit,)).fetchall()
+        rows = conn.execute(
+            "SELECT explanation_id,release_id,scoring_batch_id,started_at,n_rows,n_features,artifact_dir "
+            "FROM explanation_runs WHERE status='succeeded' ORDER BY started_at DESC,explanation_id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
         return [dict(row) for row in rows]
 
 
@@ -61,7 +66,9 @@ def load_explanation(database, explanation_id, *, max_rows=100000):
         raise ValueError("positive max_rows required")
     with closing(_connection(database)) as conn:
         conn.row_factory = sqlite3.Row
-        row = conn.execute("SELECT * FROM explanation_runs WHERE explanation_id=?", (explanation_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM explanation_runs WHERE explanation_id=?", (explanation_id,)
+        ).fetchone()
     if not row or row["status"] != "succeeded":
         raise ValueError("explicit succeeded explanation record required")
     record = dict(row)
@@ -75,24 +82,57 @@ def load_explanation(database, explanation_id, *, max_rows=100000):
             raise ValueError(f"registry/summary mismatch: {name}")
     if summary.get("schema_version") != 1 or summary.get("artifact_state") != "complete":
         raise ValueError("unsupported/incomplete explanation summary")
-    if summary.get("labels_loaded") is not False or summary.get("persisted_scoring_batch_verified") is not True:
+    if (
+        summary.get("labels_loaded") is not False
+        or summary.get("persisted_scoring_batch_verified") is not True
+    ):
         raise ValueError("unsupported explanation evidence")
     if summary.get("output_scale") != "base_model_log_odds":
         raise ValueError("only base-model log-odds contributions supported")
     if type(summary["n_rows"]) is not int or not 0 < summary["n_rows"] <= max_rows:
         raise ValueError("explanation exceeds presentation row limit")
     rows = pd.read_parquet(directory / "rows.parquet")
-    if len(rows) != summary["n_rows"] or rows.index.hasnans or rows.index.has_duplicates or isinstance(rows.index, pd.MultiIndex):
+    if (
+        len(rows) != summary["n_rows"]
+        or rows.index.hasnans
+        or rows.index.has_duplicates
+        or isinstance(rows.index, pd.MultiIndex)
+    ):
         raise ValueError("invalid explanation row keys/count")
     keys = rows.index.tolist()
-    if not (all(isinstance(k, str) for k in keys) or
-            all(isinstance(k, (int, np.integer)) and not isinstance(k, (bool, np.bool_)) for k in keys)):
+    if not (
+        all(isinstance(k, str) for k in keys)
+        or all(
+            isinstance(k, (int, np.integer)) and not isinstance(k, (bool, np.bool_)) for k in keys
+        )
+    ):
         raise ValueError("entity keys must be consistently strings or integers")
-    required = {"base_value", "margin", "p_raw", "p_release", "release_id", "scoring_batch_id", "explanation_id"}
-    allowed = required | {"margin_reconstructed", "margin_residual", "probability_residual", "p_raw_saved",
-                          "p_calibrated", "p_calibrated_reproduced", "p_calibrated_saved",
-                          "p_release_reproduced", "p_release_saved", "policy_flag"}
-    if rows.columns.duplicated().any() or not required <= set(rows.columns) or not set(rows.columns) <= allowed:
+    required = {
+        "base_value",
+        "margin",
+        "p_raw",
+        "p_release",
+        "release_id",
+        "scoring_batch_id",
+        "explanation_id",
+    }
+    allowed = required | {
+        "margin_reconstructed",
+        "margin_residual",
+        "probability_residual",
+        "p_raw_saved",
+        "p_calibrated",
+        "p_calibrated_reproduced",
+        "p_calibrated_saved",
+        "p_release_reproduced",
+        "p_release_saved",
+        "policy_flag",
+    }
+    if (
+        rows.columns.duplicated().any()
+        or not required <= set(rows.columns)
+        or not set(rows.columns) <= allowed
+    ):
         raise ValueError("unexpected explanation row schema")
     for name in ("release_id", "scoring_batch_id", "explanation_id"):
         if not (rows[name] == summary[name]).all():
@@ -105,11 +145,19 @@ def load_explanation(database, explanation_id, *, max_rows=100000):
             values = rows[name].to_numpy(dtype=float)
             if not np.isfinite(values).all() or ((values < 0) | (values > 1)).any():
                 raise ValueError("invalid probability")
-    if "policy_flag" in rows and (rows.policy_flag.isna().any() or not pd.api.types.is_bool_dtype(rows.policy_flag.dtype)):
+    if "policy_flag" in rows and (
+        rows.policy_flag.isna().any() or not pd.api.types.is_bool_dtype(rows.policy_flag.dtype)
+    ):
         raise ValueError("invalid saved policy flags")
     features = _aligned(pd.read_parquet(directory / "features.parquet"), rows.index, "features")
-    contributions = _aligned(pd.read_parquet(directory / "contributions.parquet"), rows.index, "contributions")
-    if features.columns.duplicated().any() or len(features.columns) != summary["n_features"] or not all(isinstance(n, str) for n in features.columns):
+    contributions = _aligned(
+        pd.read_parquet(directory / "contributions.parquet"), rows.index, "contributions"
+    )
+    if (
+        features.columns.duplicated().any()
+        or len(features.columns) != summary["n_features"]
+        or not all(isinstance(n, str) for n in features.columns)
+    ):
         raise ValueError("invalid estimator feature schema")
     if not features.columns.equals(contributions.columns):
         raise ValueError("contribution features differ from estimator features")
@@ -127,19 +175,31 @@ def load_explanation(database, explanation_id, *, max_rows=100000):
     for value in (margin_atol, margin_rtol, probability_atol, probability_rtol):
         if not np.isfinite(value) or value < 0:
             raise ValueError("invalid saved tolerance")
-    if not np.allclose(rows.base_value.to_numpy() + values.sum(axis=1), rows.margin,
-                       atol=margin_atol, rtol=margin_rtol):
+    if not np.allclose(
+        rows.base_value.to_numpy() + values.sum(axis=1),
+        rows.margin,
+        atol=margin_atol,
+        rtol=margin_rtol,
+    ):
         raise ValueError("stored contributions do not reconstruct margin")
     from scipy.special import expit
-    if not np.allclose(expit(rows.margin.to_numpy(dtype=float)), rows.p_raw,
-                       atol=probability_atol, rtol=probability_rtol):
+
+    if not np.allclose(
+        expit(rows.margin.to_numpy(dtype=float)),
+        rows.p_raw,
+        atol=probability_atol,
+        rtol=probability_rtol,
+    ):
         raise ValueError("stored margin does not reproduce raw probability")
     provenance = read_json(directory / "provenance.json")
     binding = dict(provenance["source_binding"])
     claimed = binding.pop("binding_sha256")
     if fingerprint(binding) != claimed or claimed != record["binding_sha256"]:
         raise ValueError("source binding fingerprint mismatch")
-    if binding["release_id"] != summary["release_id"] or binding["scoring_batch_id"] != summary["scoring_batch_id"]:
+    if (
+        binding["release_id"] != summary["release_id"]
+        or binding["scoring_batch_id"] != summary["scoring_batch_id"]
+    ):
         raise ValueError("source binding identity mismatch")
     metadata = read_json(directory / "feature_metadata.json")
     if [item["name"] for item in metadata["features"]] != list(features.columns):
@@ -153,20 +213,41 @@ def load_explanation(database, explanation_id, *, max_rows=100000):
         raise ValueError("global importance differs from saved contributions")
     if verify_explanation(directory, explanation_id) != manifest:
         raise ValueError("explanation artifacts changed during loading")
-    return ExplanationView(record, summary, rows.copy(), features, contributions,
-                           importance.sort_values(["mean_abs_contribution", "feature"], ascending=[False, True]).reset_index(drop=True),
-                           metadata, verification, manifest)
+    return ExplanationView(
+        record,
+        summary,
+        rows.copy(),
+        features,
+        contributions,
+        importance.sort_values(
+            ["mean_abs_contribution", "feature"], ascending=[False, True]
+        ).reset_index(drop=True),
+        metadata,
+        verification,
+        manifest,
+    )
 
 
 def selected_entity(view, position):
-    if isinstance(position, bool) or not isinstance(position, (int, np.integer)) or not 0 <= position < len(view.rows):
+    if (
+        isinstance(position, bool)
+        or not isinstance(position, (int, np.integer))
+        or not 0 <= position < len(view.rows)
+    ):
         raise ValueError("invalid entity selection")
     key = view.rows.index[int(position)]
     contributions = view.contributions.loc[key]
-    table = pd.DataFrame({"feature": contributions.index, "value": view.features.loc[key].tolist(),
-                          "contribution": contributions.to_numpy()})
+    table = pd.DataFrame(
+        {
+            "feature": contributions.index,
+            "value": view.features.loc[key].tolist(),
+            "contribution": contributions.to_numpy(),
+        }
+    )
     table["abs_contribution"] = table.contribution.abs()
-    table = table.sort_values(["abs_contribution", "feature"], ascending=[False, True]).drop(columns="abs_contribution")
+    table = table.sort_values(["abs_contribution", "feature"], ascending=[False, True]).drop(
+        columns="abs_contribution"
+    )
     return key, view.rows.loc[key], table
 
 

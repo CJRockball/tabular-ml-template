@@ -102,3 +102,9 @@ usage-dashboard:
 presentation-tests:
 	$(RUN) -m pytest -q tests/runtime tests/presentation tests/usage_dashboard
 # END runtime and separate usage presentation
+
+# Operational monitoring artifact consumers
+include make/monitoring.mk
+
+# Operational monitoring part two
+include make/monitoring_part2.mk

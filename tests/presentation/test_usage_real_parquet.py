@@ -7,6 +7,7 @@ def test_real_parquet_roundtrip(presentation_fixture, monkeypatch):
     from pandas.io.parquet import read_parquet
 
     from ml_template.explainability.export_report import export_report
+
     obj = presentation_fixture
     for name, frame in obj.tables.items():
         frame.to_parquet(obj.directory / name, index=True)
