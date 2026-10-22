@@ -140,7 +140,30 @@ def create_app(database, *, max_rows=100000):
             style={"maxWidth": "1500px", "margin": "2rem auto", "fontFamily": "system-ui"},
         )
 
-    app.layout = layout
+    from ml_template.usage_dashboard.monitoring_page import (
+        monitoring_layout,
+        register_monitoring_callbacks,
+    )
+
+    def combined_layout():
+        return html.Div(
+            [
+                dcc.Tabs(
+                    id="usage-section",
+                    value="explanations",
+                    children=[
+                        dcc.Tab(label="Explanations", value="explanations", children=layout()),
+                        dcc.Tab(
+                            label="Monitoring",
+                            value="monitoring",
+                            children=monitoring_layout(database),
+                        ),
+                    ],
+                )
+            ]
+        )
+
+    app.layout = combined_layout
 
     @app.callback(
         Output("usage-summary", "children"),
@@ -206,12 +229,13 @@ def create_app(database, *, max_rows=100000):
     )
     def select_row(identity, position):
         if not identity or position is None:
-            return placeholder("Choose an entity"), [], ""
+            return (placeholder("Choose an entity"), [], "")
         try:
             return local_payload(database, identity, position, max_rows=max_rows)
         except (ValueError, OSError, KeyError, sqlite3.Error) as exc:
-            return placeholder(str(exc)), [], str(exc)
+            return (placeholder(str(exc)), [], str(exc))
 
+    register_monitoring_callbacks(app, database)
     return app
 
 

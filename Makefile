@@ -105,3 +105,6 @@ presentation-tests:
 
 # Operational monitoring artifact consumers
 include make/monitoring.mk
+
+# Operational monitoring part two
+include make/monitoring_part2.mk

@@ -48,7 +48,7 @@ def test_separate_dashboard_can_construct(tmp_path, monkeypatch):
     app = module.create_app(tmp_path / "unused.db")
     assert app.server.test_client().get("/").status_code == 200
     assert app.server.test_client().get("/_dash-layout").status_code == 200
-    assert len(app.callback_map) == 3
+    assert len(app.callback_map) == 4
     assert "Released model explanations" in str(app.layout())
 
 
@@ -59,6 +59,8 @@ def test_no_model_training_or_training_dashboard_imports():
     tree = ast.parse(Path(module.__file__).read_text())
     imports = [n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module]
     assert not any(
-        name.startswith(("ml_template.models", "ml_template.training", "ml_template.dashboard"))
-        for name in imports
+
+            name.startswith(("ml_template.models", "ml_template.training", "ml_template.dashboard"))
+            for name in imports
+
     )
