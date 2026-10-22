@@ -125,7 +125,9 @@ def run(request, output, *, check_only):
     ):
         if not (saved[column] == expected).all():
             raise ValueError("saved prediction identity differs")
-    if info["policy"]["kind"] == "alert_rate" and (request["batch_definition"] != info["policy"]["batch_definition"]):
+    if info["policy"]["kind"] == "alert_rate" and (
+        request["batch_definition"] != info["policy"]["batch_definition"]
+    ):
         raise ValueError("original decision batch acknowledgement required")
     response = {
         "schema_version": 1,

@@ -11,7 +11,9 @@ from ml_template.explainability.presentation_data import selected_entity
 
 def placeholder(message):
     figure = go.Figure()
-    figure.add_annotation(text=escape(str(message)), showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper")
+    figure.add_annotation(
+        text=escape(str(message)), showarrow=False, x=0.5, y=0.5, xref="paper", yref="paper"
+    )
     figure.update_layout(template="plotly_white", height=350)
     return figure
 
@@ -28,9 +30,19 @@ def importance_figure(view, top_n=20):
     if isinstance(top_n, bool) or not isinstance(top_n, int) or top_n < 1:
         raise ValueError("positive top_n required")
     table = view.importance.head(top_n).iloc[::-1]
-    figure = go.Figure(go.Bar(x=table.mean_abs_contribution, y=[escape(str(v)) for v in table.feature], orientation="h"))
-    figure.update_layout(template="plotly_white", title=f"Global importance — all {len(view.rows)} scoring rows",
-                         xaxis_title="Mean absolute contribution (log-odds)", height=max(400, 30 * len(table)))
+    figure = go.Figure(
+        go.Bar(
+            x=table.mean_abs_contribution,
+            y=[escape(str(v)) for v in table.feature],
+            orientation="h",
+        )
+    )
+    figure.update_layout(
+        template="plotly_white",
+        title=f"Global importance — all {len(view.rows)} scoring rows",
+        xaxis_title="Mean absolute contribution (log-odds)",
+        height=max(400, 30 * len(table)),
+    )
     return figure
 
 
@@ -38,11 +50,22 @@ def distribution_figure(view, *, top_n=10, max_points=2000):
     positions = sample_positions(view, max_points)
     figure = go.Figure()
     for name in view.importance.head(top_n).feature:
-        figure.add_trace(go.Box(x=view.contributions[name].iloc[positions], name=escape(str(name)), boxpoints=False,
-                               orientation="h", showlegend=False))
+        figure.add_trace(
+            go.Box(
+                x=view.contributions[name].iloc[positions],
+                name=escape(str(name)),
+                boxpoints=False,
+                orientation="h",
+                showlegend=False,
+            )
+        )
     figure.add_vline(x=0, line_dash="dot", line_color="gray")
-    figure.update_layout(template="plotly_white", title=f"Contribution distributions — {len(positions)} of {len(view.rows)} rows",
-                         xaxis_title="Signed contribution (log-odds)", height=max(400, 40 * min(top_n, len(view.importance))))
+    figure.update_layout(
+        template="plotly_white",
+        title=f"Contribution distributions — {len(positions)} of {len(view.rows)} rows",
+        xaxis_title="Signed contribution (log-odds)",
+        height=max(400, 40 * min(top_n, len(view.importance))),
+    )
     return figure
 
 
@@ -51,18 +74,36 @@ def dependence_figure(view, feature, *, max_points=2000):
         raise ValueError("feature not found in saved estimator inputs")
     positions = sample_positions(view, max_points)
     values = view.features[feature].iloc[positions]
-    numeric = pd.api.types.is_numeric_dtype(values.dtype) and not pd.api.types.is_bool_dtype(values.dtype)
+    numeric = pd.api.types.is_numeric_dtype(values.dtype) and not pd.api.types.is_bool_dtype(
+        values.dtype
+    )
     x = values.to_numpy() if numeric else [escape(str(v)) for v in values]
     keys = [escape(str(k)) for k in view.rows.index[positions]]
-    figure = go.Figure(go.Scattergl(
-        x=x, y=view.contributions[feature].iloc[positions], mode="markers", text=keys,
-        marker={"color": view.rows.p_release.iloc[positions], "colorscale": "Viridis", "showscale": True,
-                "colorbar": {"title": "Release<br>probability"}, "size": 6, "opacity": 0.7},
-        hovertemplate="Entity: %{text}<br>Value: %{x}<br>Contribution: %{y:.4f}<extra></extra>",
-    ))
+    figure = go.Figure(
+        go.Scattergl(
+            x=x,
+            y=view.contributions[feature].iloc[positions],
+            mode="markers",
+            text=keys,
+            marker={
+                "color": view.rows.p_release.iloc[positions],
+                "colorscale": "Viridis",
+                "showscale": True,
+                "colorbar": {"title": "Release<br>probability"},
+                "size": 6,
+                "opacity": 0.7,
+            },
+            hovertemplate="Entity: %{text}<br>Value: %{x}<br>Contribution: %{y:.4f}<extra></extra>",
+        )
+    )
     figure.add_hline(y=0, line_dash="dot", line_color="gray")
-    figure.update_layout(template="plotly_white", title=f"{escape(str(feature))} — {len(positions)} sampled rows",
-                         xaxis_title=escape(str(feature)), yaxis_title="Contribution (log-odds)", height=450)
+    figure.update_layout(
+        template="plotly_white",
+        title=f"{escape(str(feature))} — {len(positions)} sampled rows",
+        xaxis_title=escape(str(feature)),
+        yaxis_title="Contribution (log-odds)",
+        height=450,
+    )
     return figure
 
 
@@ -76,14 +117,22 @@ def waterfall_figure(view, position, *, max_features=12):
     if len(table) > max_features:
         names.append("Other features (signed sum)")
         values.append(float(table.contribution.iloc[max_features:].sum()))
-    figure = go.Figure(go.Waterfall(
-        orientation="h", measure=["absolute", *(["relative"] * len(values)), "total"],
-        y=["Baseline", *names, "Prediction margin"],
-        x=[float(row.base_value), *values, 0],
-        connector={"line": {"color": "gray"}},
-        increasing={"marker": {"color": "#c44240"}}, decreasing={"marker": {"color": "#3280b9"}},
-    ))
-    figure.update_layout(template="plotly_white", title=f"Entity {escape(str(key))}: base-model explanation",
-                         xaxis_title="Base-model log-odds — not probability percentage points",
-                         height=max(450, 33 * (len(values) + 2)), yaxis={"autorange": "reversed"})
+    figure = go.Figure(
+        go.Waterfall(
+            orientation="h",
+            measure=["absolute", *(["relative"] * len(values)), "total"],
+            y=["Baseline", *names, "Prediction margin"],
+            x=[float(row.base_value), *values, 0],
+            connector={"line": {"color": "gray"}},
+            increasing={"marker": {"color": "#c44240"}},
+            decreasing={"marker": {"color": "#3280b9"}},
+        )
+    )
+    figure.update_layout(
+        template="plotly_white",
+        title=f"Entity {escape(str(key))}: base-model explanation",
+        xaxis_title="Base-model log-odds — not probability percentage points",
+        height=max(450, 33 * (len(values) + 2)),
+        yaxis={"autorange": "reversed"},
+    )
     return figure

@@ -50,7 +50,10 @@ def test_unsuccessful_execution_rejected(presentation_fixture):
         obj.view()
 
 
-@pytest.mark.parametrize("mutation", ["keys", "columns", "nonfinite", "additivity", "probability", "importance", "labels"])
+@pytest.mark.parametrize(
+    "mutation",
+    ["keys", "columns", "nonfinite", "additivity", "probability", "importance", "labels"],
+)
 def test_semantic_mismatch_rejected(presentation_fixture, mutation):
     obj = presentation_fixture
     if mutation == "keys":

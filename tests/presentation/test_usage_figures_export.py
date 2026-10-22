@@ -20,8 +20,13 @@ from ml_template.explainability.figures import (
 
 def test_all_figures_construct_and_serialize(presentation_fixture):
     view = presentation_fixture.view()
-    for figure in (importance_figure(view), distribution_figure(view), dependence_figure(view, "x"),
-                   dependence_figure(view, "kind"), waterfall_figure(view, 0, max_features=1)):
+    for figure in (
+        importance_figure(view),
+        distribution_figure(view),
+        dependence_figure(view, "x"),
+        dependence_figure(view, "kind"),
+        waterfall_figure(view, 0, max_features=1),
+    ):
         assert json.loads(figure.to_json())["data"]
 
 
@@ -50,8 +55,11 @@ def test_script_data_escaping():
 def test_offline_report_is_separate_and_source_unchanged(presentation_fixture, tmp_path):
     obj = presentation_fixture
     before = {p.name: p.read_bytes() for p in obj.directory.iterdir()}
-    result = export_report(obj.database, "explain_fixture", tmp_path / "reports", entities=[10], max_local=1)
+    result = export_report(
+        obj.database, "explain_fixture", tmp_path / "reports", entities=[10], max_local=1
+    )
     from pathlib import Path
+
     report = Path(result["artifact_dir"])
     html = (report / "report.html").read_text()
     assert "plotly.js" in html.lower()

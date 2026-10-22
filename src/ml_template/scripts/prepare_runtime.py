@@ -39,7 +39,9 @@ print(json.dumps({'ready': True, 'release_id': manifest['release_id'],
 
 
 def fingerprint(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
 
 
 def git(repo, *arguments, input_bytes=None):
@@ -47,7 +49,11 @@ def git(repo, *arguments, input_bytes=None):
 
 
 def resolve_commit(repo, commit):
-    return git(repo, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}").decode().strip()
+    return (
+        git(repo, "rev-parse", "--verify", "--end-of-options", f"{commit}^{{commit}}")
+        .decode()
+        .strip()
+    )
 
 
 def commit_hashes(repo, commit):
@@ -66,8 +72,14 @@ def commit_hashes(repo, commit):
         entries.append((name.removeprefix("src/ml_template/"), blob.decode()))
     if not entries:
         return {}
-    stream = io.BytesIO(git(repo, "cat-file", "--batch",
-                           input_bytes=("\n".join(blob for _, blob in entries) + "\n").encode()))
+    stream = io.BytesIO(
+        git(
+            repo,
+            "cat-file",
+            "--batch",
+            input_bytes=("\n".join(blob for _, blob in entries) + "\n").encode(),
+        )
+    )
     result = {}
     for name, expected_blob in entries:
         header = stream.readline().split()
@@ -94,11 +106,17 @@ def matching_commit(repo, expected, commit=None, limit=1000):
     if commit:
         candidates = [resolve_commit(repo, commit)]
     else:
-        candidates = git(repo, "rev-list", f"--max-count={limit}", "--all", "--", "src/ml_template").decode().splitlines()
+        candidates = (
+            git(repo, "rev-list", f"--max-count={limit}", "--all", "--", "src/ml_template")
+            .decode()
+            .splitlines()
+        )
     for candidate in candidates:
         if commit_hashes(repo, candidate) == expected:
             return candidate
-    raise ValueError("No exact committed source snapshot found; supply the matching commit or recover the original source. No hashes were changed.")
+    raise ValueError(
+        "No exact committed source snapshot found; supply the matching commit or recover the original source. No hashes were changed."
+    )
 
 
 def verify_environment(checkout, release, *, timeout=120):
@@ -109,8 +127,20 @@ def verify_environment(checkout, release, *, timeout=120):
     for key in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE"):
         env.pop(key, None)
     completed = subprocess.run(
-        [str(executable), "-I", "-c", VERIFY_CODE, str(release), str(Path(checkout) / "src/ml_template")],
-        cwd=checkout, env=env, capture_output=True, text=True, timeout=timeout, check=False,
+        [
+            str(executable),
+            "-I",
+            "-c",
+            VERIFY_CODE,
+            str(release),
+            str(Path(checkout) / "src/ml_template"),
+        ],
+        cwd=checkout,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
     )
     if completed.returncode:
         raise ValueError("Pinned environment does not match: " + completed.stderr[-5000:])
@@ -122,14 +152,27 @@ def verify_environment(checkout, release, *, timeout=120):
 
 def sync_environment(destination, python_version, timeout):
     environment = os.environ.copy()
-    for name in ("VIRTUAL_ENV", "UV_PROJECT", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON", "PYTHONPATH", "PYTHONHOME"):
+    for name in (
+        "VIRTUAL_ENV",
+        "UV_PROJECT",
+        "UV_PROJECT_ENVIRONMENT",
+        "UV_PYTHON",
+        "PYTHONPATH",
+        "PYTHONHOME",
+    ):
         environment.pop(name, None)
     environment["UV_PROJECT_ENVIRONMENT"] = str(destination / ".venv")
-    subprocess.run(["uv", "sync", "--project", str(destination), "--frozen", "--python", python_version],
-                   env=environment, timeout=timeout, check=True)
+    subprocess.run(
+        ["uv", "sync", "--project", str(destination), "--frozen", "--python", python_version],
+        env=environment,
+        timeout=timeout,
+        check=True,
+    )
 
 
-def prepare(repo, release, *, runtime_root=None, checkout=None, commit=None, create=False, timeout=900):
+def prepare(
+    repo, release, *, runtime_root=None, checkout=None, commit=None, create=False, timeout=900
+):
     from ml_template.scoring.release_artifacts import read_json, verify
 
     repo, release = Path(repo).resolve(), Path(release).resolve()
@@ -139,7 +182,9 @@ def prepare(repo, release, *, runtime_root=None, checkout=None, commit=None, cre
         raise ValueError("release must record an exact Python patch version")
     identity = fingerprint(runtime)
     root = Path(runtime_root or repo.parent / ".ml-template-runtimes").expanduser().resolve()
-    destination = Path(checkout).expanduser().resolve() if checkout else root / f"rt_{identity[:24]}"
+    destination = (
+        Path(checkout).expanduser().resolve() if checkout else root / f"rt_{identity[:24]}"
+    )
     for target in (root, destination):
         if (
             target in (repo, release)
@@ -165,20 +210,33 @@ def prepare(repo, release, *, runtime_root=None, checkout=None, commit=None, cre
             git(repo, "cat-file", "-e", f"{resolved}:{name}")
     executable = destination / ".venv/bin/python"
     env_exists = executable.is_file() and os.access(executable, os.X_OK)
-    verified = verify_environment(destination, release, timeout=min(timeout, 120)) if env_exists else None
+    verified = (
+        verify_environment(destination, release, timeout=min(timeout, 120)) if env_exists else None
+    )
     if verified is not None and fingerprint(verified["runtime"]) != identity:
         raise ValueError("verified runtime fingerprint differs")
-    result = {"ready": verified is not None, "created": False,
-              "runtime_sha256": identity, "release_id": manifest["release_id"],
-              "commit": resolved, "source_matches_commit": commit_hashes(destination if existing else repo, resolved) == runtime["code_sha256"], "checkout": str(destination),
-              "yaml_values": {"runtime_python": str(executable),
-                              "runtime_source_root": str(destination / "src/ml_template")},
-              "next_action": "reuse" if verified is not None else "create_with_explicit_flag"}
+    result = {
+        "ready": verified is not None,
+        "created": False,
+        "runtime_sha256": identity,
+        "release_id": manifest["release_id"],
+        "commit": resolved,
+        "source_matches_commit": commit_hashes(destination if existing else repo, resolved)
+        == runtime["code_sha256"],
+        "checkout": str(destination),
+        "yaml_values": {
+            "runtime_python": str(executable),
+            "runtime_source_root": str(destination / "src/ml_template"),
+        },
+        "next_action": "reuse" if verified is not None else "create_with_explicit_flag",
+    }
     if not create:
         return result
     if not env_exists:
         if (destination / ".venv").exists() or (destination / ".venv").is_symlink():
-            raise ValueError("incomplete existing .venv will not be repaired or overwritten automatically")
+            raise ValueError(
+                "incomplete existing .venv will not be repaired or overwritten automatically"
+            )
         if not existing:
             destination.parent.mkdir(parents=True, exist_ok=True)
             git(repo, "worktree", "add", "--detach", str(destination), resolved)
@@ -186,19 +244,36 @@ def prepare(repo, release, *, runtime_root=None, checkout=None, commit=None, cre
             sync_environment(destination, runtime["python"], timeout)
             verified = verify_environment(destination, release, timeout=min(timeout, 120))
         except Exception as exc:
-            exc.add_note(f"Historical checkout retained for inspection: {destination}. No release files were edited.")
+            exc.add_note(
+                f"Historical checkout retained for inspection: {destination}. No release files were edited."
+            )
             raise
         result["created"] = True
-    if checkout_hashes(destination) != runtime["code_sha256"] or fingerprint(verified["runtime"]) != identity:
+    if (
+        checkout_hashes(destination) != runtime["code_sha256"]
+        or fingerprint(verified["runtime"]) != identity
+    ):
         raise ValueError("source/runtime changed during preparation")
     verify(release, manifest["release_id"])
     records = root / "records"
     records.mkdir(parents=True, exist_ok=True)
     record = records / f"rt_{identity[:24]}_{uuid.uuid4().hex[:12]}.json"
-    record.write_text(json.dumps({"schema_version": 1, "verified": True,
-        "created_at": datetime.now(UTC).isoformat(), "runtime_sha256": identity,
-        "release_id": manifest["release_id"], "commit": resolved,
-        "checkout": str(destination), "yaml_values": result["yaml_values"]}, indent=2) + "\n")
+    record.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "verified": True,
+                "created_at": datetime.now(UTC).isoformat(),
+                "runtime_sha256": identity,
+                "release_id": manifest["release_id"],
+                "commit": resolved,
+                "checkout": str(destination),
+                "yaml_values": result["yaml_values"],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     return {**result, "ready": True, "next_action": "reuse", "preparation_manifest": str(record)}
 
 
@@ -216,11 +291,19 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.repo is None:
         from ml_template.paths import ROOT
+
         args.repo = ROOT
     if args.timeout < 1:
         parser.error("timeout must be positive")
-    result = prepare(args.repo, args.release, runtime_root=args.runtime_root, checkout=args.checkout,
-                     commit=args.commit, create=args.create, timeout=args.timeout)
+    result = prepare(
+        args.repo,
+        args.release,
+        runtime_root=args.runtime_root,
+        checkout=args.checkout,
+        commit=args.commit,
+        create=args.create,
+        timeout=args.timeout,
+    )
     print(json.dumps(result, indent=2))
 
 
